@@ -26,6 +26,7 @@ vi.mock('react-markdown', () => ({
 
 vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/file', () => ({
   File: {
+    ImagePreview: vi.fn().mockResolvedValue(null),
     OpenFile: vi.fn(),
   },
 }))

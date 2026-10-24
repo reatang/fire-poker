@@ -10,11 +10,20 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as file_dto$0 from "./file_dto/models.js";
 
 /**
+ * ImagePreview reads supported raster images for display inside the webview.
+ */
+export function ImagePreview(input: file_dto$0.ImagePreviewInput): $CancellablePromise<file_dto$0.ImagePreviewOutput | null> {
+    return $Call.ByID(1905101782, input).then(($result: any) => {
+        return $$createType1($result);
+    });
+}
+
+/**
  * OpenFile open a file
  */
 export function OpenFile(input: file_dto$0.OpenFileInput): $CancellablePromise<file_dto$0.OpenFileOutput | null> {
     return $Call.ByID(1321085295, input).then(($result: any) => {
-        return $$createType1($result);
+        return $$createType3($result);
     });
 }
 
@@ -24,7 +33,7 @@ export function OpenFile(input: file_dto$0.OpenFileInput): $CancellablePromise<f
  */
 export function SaveTempFile(input: file_dto$0.SaveTempFileInput): $CancellablePromise<file_dto$0.SaveTempFileOutput | null> {
     return $Call.ByID(709397032, input).then(($result: any) => {
-        return $$createType3($result);
+        return $$createType5($result);
     });
 }
 
@@ -33,7 +42,7 @@ export function SaveTempFile(input: file_dto$0.SaveTempFileInput): $CancellableP
  */
 export function SelectFile(input: file_dto$0.SelectFileInput): $CancellablePromise<file_dto$0.SelectFileOutput | null> {
     return $Call.ByID(4047000683, input).then(($result: any) => {
-        return $$createType5($result);
+        return $$createType7($result);
     });
 }
 
@@ -42,16 +51,18 @@ export function SelectFile(input: file_dto$0.SelectFileInput): $CancellablePromi
  */
 export function SelectFolder(input: file_dto$0.SelectFolderInput): $CancellablePromise<file_dto$0.SelectFolderOutput | null> {
     return $Call.ByID(3661294405, input).then(($result: any) => {
-        return $$createType7($result);
+        return $$createType9($result);
     });
 }
 
 // Private type creation functions
-const $$createType0 = file_dto$0.OpenFileOutput.createFrom;
+const $$createType0 = file_dto$0.ImagePreviewOutput.createFrom;
 const $$createType1 = $Create.Nullable($$createType0);
-const $$createType2 = file_dto$0.SaveTempFileOutput.createFrom;
+const $$createType2 = file_dto$0.OpenFileOutput.createFrom;
 const $$createType3 = $Create.Nullable($$createType2);
-const $$createType4 = file_dto$0.SelectFileOutput.createFrom;
+const $$createType4 = file_dto$0.SaveTempFileOutput.createFrom;
 const $$createType5 = $Create.Nullable($$createType4);
-const $$createType6 = file_dto$0.SelectFolderOutput.createFrom;
+const $$createType6 = file_dto$0.SelectFileOutput.createFrom;
 const $$createType7 = $Create.Nullable($$createType6);
+const $$createType8 = file_dto$0.SelectFolderOutput.createFrom;
+const $$createType9 = $Create.Nullable($$createType8);

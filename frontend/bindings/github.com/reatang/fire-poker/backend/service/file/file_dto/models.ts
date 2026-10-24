@@ -5,6 +5,48 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
+export class ImagePreviewInput {
+    "path": string;
+
+    /** Creates a new ImagePreviewInput instance. */
+    constructor($$source: Partial<ImagePreviewInput> = {}) {
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ImagePreviewInput instance from a string or object.
+     */
+    static createFrom($$source: any = {}): ImagePreviewInput {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ImagePreviewInput($$parsedSource as Partial<ImagePreviewInput>);
+    }
+}
+
+export class ImagePreviewOutput {
+    "dataURL": string;
+
+    /** Creates a new ImagePreviewOutput instance. */
+    constructor($$source: Partial<ImagePreviewOutput> = {}) {
+        if (!("dataURL" in $$source)) {
+            this["dataURL"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ImagePreviewOutput instance from a string or object.
+     */
+    static createFrom($$source: any = {}): ImagePreviewOutput {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new ImagePreviewOutput($$parsedSource as Partial<ImagePreviewOutput>);
+    }
+}
+
 export class OpenFileInput {
     "path": string;
 

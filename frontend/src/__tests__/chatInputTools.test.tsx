@@ -64,6 +64,7 @@ vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/window', () => 
 
 vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/file', () => ({
   File: {
+    ImagePreview: vi.fn().mockResolvedValue(null),
     SelectFile: vi.fn(),
     SaveTempFile: vi.fn(),
   },
