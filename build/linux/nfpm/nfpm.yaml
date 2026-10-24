@@ -1,0 +1,67 @@
+# Feel free to remove those if you don't want/need to use them.
+# Make sure to check the documentation at https://nfpm.goreleaser.com
+#
+# The lines below are called `modelines`. See `:help modeline`
+
+name: "fire-poker"
+arch: ${GOARCH}
+platform: "linux"
+version: "0.3.0"
+section: "default"
+priority: "extra"
+maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
+description: "一个经典模式的智能体客户端"
+vendor: "reatang"
+homepage: "https://github.com/reatang/fire-poker"
+license: "MIT"
+release: "1"
+
+contents:
+  - src: "./bin/fire-poker"
+    dst: "/usr/local/bin/fire-poker"
+  - src: "./build/appicon.png"
+    dst: "/usr/share/icons/hicolor/128x128/apps/fire-poker.png"
+  - src: "./build/linux/fire-poker.desktop"
+    dst: "/usr/share/applications/fire-poker.desktop"
+
+# Default dependencies for Linux packages built with Wails v3's GTK4/WebKitGTK 6.0 stack
+depends:
+  - libgtk-4-1
+  - libwebkitgtk-6.0-4
+
+# Distribution-specific overrides for package naming differences
+overrides:
+  # RPM package names
+  rpm:
+    depends:
+      - gtk4
+      - webkitgtk6.0
+  
+  # Arch Linux package names
+  archlinux:
+    depends:
+      - gtk4
+      - webkitgtk-6.0
+
+# scripts section to ensure desktop database is updated after install
+scripts:
+  postinstall: "./build/linux/nfpm/scripts/postinstall.sh"
+  # You can also add preremove, postremove if needed
+  # preremove: "./build/linux/nfpm/scripts/preremove.sh"
+  # postremove: "./build/linux/nfpm/scripts/postremove.sh"
+
+# replaces:
+#   - foobar
+# provides:
+#   - bar
+# depends:
+#   - gtk4
+#   - libwebkitgtk-6.0
+# recommends:
+#   - whatever
+# suggests:
+#   - something-else
+# conflicts:
+#   - not-foo
+#   - not-bar
+# changelog: "changelog.yaml"

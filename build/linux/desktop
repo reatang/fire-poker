@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.0
+Name=My Product
+Comment=A init application
+# The Exec line includes %u to pass the URL to the application
+Exec=/usr/local/bin/init %u
+Terminal=false
+Type=Application
+Icon=init
+Categories=Utility;
+StartupWMClass=init
+
+ 

@@ -1,0 +1,18 @@
+package data_models
+
+import "github.com/reatang/fire-poker/backend/pkg/provider"
+
+type Provider struct {
+	OrmModel
+	ProviderName string        `gorm:"type:varchar(255)" json:"provider_name"`  // 提供方名称
+	ProviderType provider.Type `gorm:"type:varchar(255)" json:"provider_type"`  // 提供方类型
+	BaseUrl      string        `gorm:"type:varchar(255)" json:"base_url"`       // 基础url
+	ApiKey       string        `gorm:"type:varchar(255)" json:"api_key"`        // api key
+	Enable       bool          `gorm:"index;type:bool;default:1" json:"enable"` // 启用
+}
+
+type ProviderDefaultModel struct {
+	OrmModel
+	ProviderID uint `gorm:"index:idx_provider_model" json:"provider_id"`
+	ModelId    uint `gorm:"index:idx_provider_model" json:"model_id"`
+}

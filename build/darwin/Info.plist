@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleName</key>
+	<string>Fire Poker</string>
+	<key>CFBundleExecutable</key>
+	<string>fire-poker</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.reatang.fire-poker</string>
+	<key>CFBundleVersion</key>
+	<string>0.3.0</string>
+	<key>CFBundleGetInfoString</key>
+	<string>一个经典模式的智能体客户端</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.3.0</string>
+	<key>CFBundleIconFile</key>
+	<string>icons</string>
+	<key>CFBundleIconName</key>
+	<string>icons</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>10.15.0</string>
+	<key>NSHighResolutionCapable</key>
+	<string>true</string>
+	<key>NSHumanReadableCopyright</key>
+	<string></string>
+	<key>CFBundleDisplayName</key>
+	<string>Fire Poker</string>
+</dict>
+</plist>

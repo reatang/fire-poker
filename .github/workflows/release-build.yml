@@ -1,0 +1,158 @@
+name: Desktop packages
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/release-build.yml"
+      - "build/**"
+      - "tools/**"
+      - "go.*"
+      - "main*.go"
+      - "backend/**"
+      - "frontend/**"
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: tools/release.py.lock
+      - name: Validate packaging logic
+        run: uv run --with pyyaml==6.0.3 python -m unittest discover -s tools/tests -v
+      - name: Validate version tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: uv run tools/release.py plan --tag "$env:RELEASE_TAG"
+      - name: Frontend checks
+        shell: bash
+        working-directory: frontend
+        run: |
+          npm ci
+          npx vitest run
+          npm run build
+      - name: Install C compiler
+        shell: pwsh
+        run: |
+          choco install mingw --version=14.2.0 --yes --no-progress --allow-downgrade
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+          $env:PATH = $machinePath + ";" + $env:PATH
+          $machinePath.Split(';') >> $env:GITHUB_PATH
+          "CC=$((Get-Command gcc.exe -ErrorAction Stop).Source)" >> $env:GITHUB_ENV
+      - name: Backend checks
+        shell: pwsh
+        run: |
+          $env:CGO_ENABLED = "1"
+          go test ./...
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          go vet ./...
+
+  package:
+    if: github.event_name != 'pull_request'
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: windows-amd64
+            runner: windows-2022
+          - target: darwin-amd64
+            runner: macos-15-intel
+          - target: darwin-arm64
+            runner: macos-15
+          - target: linux-amd64
+            runner: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: tools/release.py.lock
+      - name: Windows prerequisites
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install nsis --version=3.13.0 --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          choco install mingw --version=14.2.0 --yes --no-progress --allow-downgrade
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "C:\Program Files (x86)\NSIS" >> $env:GITHUB_PATH
+          $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+          $env:PATH = $machinePath + ";" + $env:PATH
+          $machinePath.Split(';') >> $env:GITHUB_PATH
+          "CC=$((Get-Command gcc.exe -ErrorAction Stop).Source)" >> $env:GITHUB_ENV
+      - name: Linux prerequisites
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libayatana-appindicator3-dev rpm fakeroot
+      - name: Install matching Wails CLI
+        run: uv run tools/release.py install-cli
+      - name: Build native packages
+        run: uv run --locked tools/release.py package --target ${{ matrix.target }}
+      - name: Verify checksums
+        run: uv run --locked tools/release.py verify --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fire-poker-${{ matrix.target }}
+          path: release/*/${{ matrix.target }}/*
+          if-no-files-found: error
+          retention-days: 14
+
+  draft-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: fire-poker-*
+          path: artifacts
+      - name: Assemble release assets and checksums
+        shell: bash
+        run: |
+          mkdir release
+          find artifacts -type f ! -name SHA256SUMS.txt ! -name manifest.json -exec cp {} release/ \;
+          cd release
+          sha256sum * > SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: release/*

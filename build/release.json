@@ -1,0 +1,8 @@
+{
+  "name": "fire-poker",
+  "productName": "Fire Poker",
+  "identifier": "com.reatang.fire-poker",
+  "maintainer": "reatang",
+  "description": "一个经典模式的智能体客户端",
+  "version": "0.3.0"
+}
