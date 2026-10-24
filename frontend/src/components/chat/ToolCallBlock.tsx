@@ -12,9 +12,10 @@ type Props = {
   status: 'executing' | 'completed' | 'failed' | 'user_commented' | 'user_rejected'
 }
 
-export function ToolCallBlock({ toolName, purpose, args, result, userComment, status }: Props) {
+export function ToolCallBlock({ toolName, purpose, args, result, userComment, status: suppliedStatus }: Props) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
+  const status = suppliedStatus === 'completed' && toolResultFailed(result) ? 'failed' : suppliedStatus
 
   const statusIcon = {
     executing: <Wrench size={12} className="animate-spin" />,
@@ -76,4 +77,17 @@ export function ToolCallBlock({ toolName, purpose, args, result, userComment, st
       )}
     </div>
   )
+}
+
+function toolResultFailed(result: string): boolean {
+  if (/^Error:\s/i.test(result.trim())) return true
+  try {
+    const parsed: unknown = JSON.parse(result)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false
+    const output = parsed as Record<string, unknown>
+    return Boolean(output.error)
+      || (typeof output.exit_code === 'number' && output.exit_code !== 0)
+  } catch {
+    return false
+  }
 }

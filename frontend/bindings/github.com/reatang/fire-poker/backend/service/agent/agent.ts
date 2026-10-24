@@ -96,7 +96,7 @@ export function RespondToConfirm(input: agent_dto$0.RespondToConfirmInput): $Can
 }
 
 /**
- * SaveSessionToolSettings persists a session override without modifying global defaults.
+ * SaveSessionToolSettings saves a pre-conversation selection without modifying global defaults.
  */
 export function SaveSessionToolSettings(input: agent_dto$0.SaveSessionToolsInput): $CancellablePromise<agent_dto$0.SessionToolsOutput | null> {
     return $Call.ByID(1716815819, input).then(($result: any) => {

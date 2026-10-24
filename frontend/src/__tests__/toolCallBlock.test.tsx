@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { ToolCallBlock } from '@/components/chat/ToolCallBlock'
 import { ToolCallsGroup } from '@/components/chat/ToolCallsGroup'
 import type { DisplayMessage } from '@/types'
+import i18n from '@/i18n'
 
 const toolMessage: DisplayMessage = {
   id: 1,
@@ -22,6 +23,21 @@ const toolMessage: DisplayMessage = {
 }
 
 describe('ToolCallBlock', () => {
+  it.each([
+    'Error: callable tool execution failed: terminal unavailable',
+    JSON.stringify({ stdout: '', stderr: 'command failed', exit_code: 1 }),
+    JSON.stringify({ error: 'process failed' }),
+  ])('marks execution errors as failed instead of completed: %s', (result) => {
+    render(<ToolCallBlock toolName="windows_shell" purpose="Run command" args="{}" result={result} status="completed" />)
+    expect(screen.getByText(i18n.t('toolCall.failed'))).toBeInTheDocument()
+    expect(screen.queryByText(i18n.t('toolCall.completed'))).toBeNull()
+  })
+
+  it('does not treat stderr text alone as an execution failure', () => {
+    render(<ToolCallBlock toolName="windows_shell" purpose="Run command" args="{}" result={JSON.stringify({ stdout: 'ok', stderr: 'warning', exit_code: 0 })} status="completed" />)
+    expect(screen.getByText(i18n.t('toolCall.completed'))).toBeInTheDocument()
+  })
+
   it('uses compact thought styling with a lined detail panel', async () => {
     const user = userEvent.setup()
     render(

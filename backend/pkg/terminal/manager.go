@@ -61,12 +61,14 @@ type CreateParams struct {
 	Visible    bool
 	Rows       uint16
 	Cols       uint16
+	UsePipes   bool
 }
 
 type session struct {
 	info Info
 	proc ptyProcess
 	mu   sync.Mutex
+	done chan struct{}
 }
 
 type Manager struct {
@@ -82,11 +84,16 @@ type Manager struct {
 // NewManager creates a PTY terminal manager backed by persistent storage.
 func NewManager(store *storage.Storage, emitOutput func(OutputEvent)) *Manager {
 	return &Manager{
-		store:        store,
-		emitOutput:   emitOutput,
-		sessions:     make(map[string]*session),
-		nextID:       defaultID,
-		startProcess: startPTYProcess,
+		store:      store,
+		emitOutput: emitOutput,
+		sessions:   make(map[string]*session),
+		nextID:     defaultID,
+		startProcess: func(ctx context.Context, params CreateParams) (ptyProcess, int, error) {
+			if params.UsePipes {
+				return startPipeProcess(ctx, params)
+			}
+			return startPTYProcess(ctx, params)
+		},
 	}
 }
 
@@ -134,7 +141,7 @@ func (m *Manager) Create(ctx context.Context, params CreateParams) (Info, error)
 		return Info{}, err
 	}
 	info := terminalInfo(*record)
-	sess := &session{info: info, proc: proc}
+	sess := &session{info: info, proc: proc, done: make(chan struct{})}
 
 	m.mu.Lock()
 	m.sessions[id] = sess
@@ -246,6 +253,10 @@ func (m *Manager) ReadTerminalOutput(ctx context.Context, terminalID string, cur
 
 // Wait blocks until the terminal exits and returns the final persisted metadata.
 func (m *Manager) Wait(terminalID string) (Info, error) {
+	return m.wait(context.Background(), terminalID)
+}
+
+func (m *Manager) wait(ctx context.Context, terminalID string) (Info, error) {
 	m.mu.RLock()
 	sess := m.sessions[terminalID]
 	m.mu.RUnlock()
@@ -256,7 +267,11 @@ func (m *Manager) Wait(terminalID string) (Info, error) {
 		}
 		return terminalInfo(*record), nil
 	}
-	<-sess.proc.Done()
+	select {
+	case <-sess.done:
+	case <-ctx.Done():
+		return Info{}, ctx.Err()
+	}
 	record, err := m.store.GetTerminal(terminalID)
 	if err != nil {
 		return sess.info, err
@@ -266,12 +281,12 @@ func (m *Manager) Wait(terminalID string) (Info, error) {
 
 // WaitTerminal exposes Wait using the method name expected by agent tools.
 func (m *Manager) WaitTerminal(ctx context.Context, terminalID string) (Info, error) {
-	_ = ctx
-	return m.Wait(terminalID)
+	return m.wait(ctx, terminalID)
 }
 
 // drain persists PTY output chunks and emits terminal lifecycle events.
 func (m *Manager) drain(id string, sess *session) {
+	defer close(sess.done)
 	for chunk := range sess.proc.Output() {
 		stored, err := m.store.AppendTerminalOutput(id, string(chunk))
 		if err != nil {

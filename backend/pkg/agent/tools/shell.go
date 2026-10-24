@@ -153,6 +153,7 @@ func shellFuncTerminal(ctx context.Context, emitter ShellProgressEmitter, sessio
 		Args:      args,
 		Cwd:       resolveShellWorkDir(input.WorkDir),
 		Visible:   visible,
+		UsePipes:  !input.UsePty,
 	})
 	if err != nil {
 		return shellOutput{}, err

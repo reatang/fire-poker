@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -146,6 +147,7 @@ func (ch *ChatHandler) encodeMemory(ctx context.Context, params SendMessageParam
 	core, _ := ch.manager.Storage().RenderCoreMemory(defaultUserCoreMemoryLimit, defaultAssistantCoreMemoryLimit)
 	system := `You are a long-term memory encoder for Fire Poker.
 Return only compact JSON with fields action, target_id, summary, content, type, target, importance, confidence.
+target_id must be a non-negative JSON integer (0 when unused). importance and confidence must be JSON integers from 0 to 100, never strings or labels such as "high". Use 50 for importance and 80 for confidence when uncertain.
 Allowed action values: add, replace, remove, no-op.
 Allowed type values: fact, information, event. Allowed target values: user, memory.
 Only save stable long-term user facts, preferences, plans, project rules, or durable workflow constraints.
@@ -183,8 +185,33 @@ func parseMemoryDecision(raw string) (memoryEncodingDecision, error) {
 	raw = strings.TrimPrefix(raw, "```")
 	raw = strings.TrimSuffix(raw, "```")
 	raw = strings.TrimSpace(raw)
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		return memoryEncodingDecision{}, err
+	}
+	// Some providers return numeric scores as strings despite the requested schema.
+	// Accept numeric strings, but never invent scores for labels or malformed values.
+	for _, name := range []string{"importance", "confidence"} {
+		value := strings.TrimSpace(string(fields[name]))
+		if !strings.HasPrefix(value, `"`) {
+			continue
+		}
+		var text string
+		if err := json.Unmarshal(fields[name], &text); err != nil {
+			return memoryEncodingDecision{}, fmt.Errorf("memory %s: %w", name, err)
+		}
+		score, err := strconv.Atoi(strings.TrimSpace(text))
+		if err != nil {
+			return memoryEncodingDecision{}, fmt.Errorf("memory %s must be an integer: %w", name, err)
+		}
+		fields[name] = json.RawMessage(strconv.Itoa(score))
+	}
+	normalized, err := json.Marshal(fields)
+	if err != nil {
+		return memoryEncodingDecision{}, err
+	}
 	var decision memoryEncodingDecision
-	if err := json.Unmarshal([]byte(raw), &decision); err != nil {
+	if err := json.Unmarshal(normalized, &decision); err != nil {
 		return decision, err
 	}
 	decision.Action = strings.ToLower(strings.TrimSpace(decision.Action))

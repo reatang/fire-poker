@@ -178,6 +178,9 @@ func TestShellFuncTerminalHidesNormalCommandsByDefault(t *testing.T) {
 	if runner.createParams.Visible {
 		t.Fatal("expected normal shell terminal to stay hidden by default")
 	}
+	if !runner.createParams.UsePipes {
+		t.Fatal("ordinary command unexpectedly requires a PTY")
+	}
 }
 
 // TestShellFuncTerminalHidesVisibleTerminalAfterExit verifies completed visible terminals are hidden.
@@ -195,6 +198,9 @@ func TestShellFuncTerminalHidesVisibleTerminalAfterExit(t *testing.T) {
 	}
 	if !runner.createParams.Visible {
 		t.Fatal("expected pty shell terminal to be visible while running")
+	}
+	if runner.createParams.UsePipes {
+		t.Fatal("interactive command did not request a PTY")
 	}
 	if len(runner.visibility) != 1 || runner.visibility[0] {
 		t.Fatalf("expected visible terminal to be hidden after exit, got %v", runner.visibility)
