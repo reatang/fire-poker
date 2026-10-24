@@ -5,10 +5,6 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as time$0 from "../../../../../../../time/models.js";
-
 /**
  * DismissNotificationInput identifies the notification to remove.
  */
@@ -114,8 +110,8 @@ export class NotificationItem {
     "kind": string;
     "title": string;
     "message": string;
-    "created_at": time$0.Time;
-    "resolved_at"?: time$0.Time | null;
+    "created_at": string;
+    "resolved_at"?: string | null;
 
     /** Creates a new NotificationItem instance. */
     constructor($$source: Partial<NotificationItem> = {}) {
@@ -135,7 +131,7 @@ export class NotificationItem {
             this["message"] = "";
         }
         if (!("created_at" in $$source)) {
-            this["created_at"] = null;
+            this["created_at"] = "0001-01-01T00:00:00.000Z";
         }
 
         Object.assign(this, $$source);

@@ -8,9 +8,6 @@ import { Create as $Create } from "@wailsio/runtime";
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
 import * as gorm$0 from "../../../../../../gorm.io/gorm/models.js";
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as time$0 from "../../../../../../time/models.js";
 
 /**
  * ExtensionItem stores one imported MCP tool or plugin entry.
@@ -137,8 +134,8 @@ export class ExtensionTool {
  */
 export class TerminalOutputChunk {
     "id": number;
-    "created_at": time$0.Time;
-    "updated_at": time$0.Time;
+    "created_at": string;
+    "updated_at": string;
     "deleted_at": gorm$0.DeletedAt;
     "terminal_id": string;
     "seq": number;
@@ -152,10 +149,10 @@ export class TerminalOutputChunk {
             this["id"] = 0;
         }
         if (!("created_at" in $$source)) {
-            this["created_at"] = null;
+            this["created_at"] = "0001-01-01T00:00:00.000Z";
         }
         if (!("updated_at" in $$source)) {
-            this["updated_at"] = null;
+            this["updated_at"] = "0001-01-01T00:00:00.000Z";
         }
         if (!("deleted_at" in $$source)) {
             this["deleted_at"] = null;
