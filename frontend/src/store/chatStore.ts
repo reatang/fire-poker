@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { preferredModel } from '@/lib/modelSelection'
 import { useModelSelectionStore } from './modelSelectionStore'
-import { useAppStore } from './appStore'
 import { Events } from '@wailsio/runtime'
 import { Agent as AgentBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/agent'
 import type { Type as ProviderType } from '@bindings/github.com/reatang/fire-poker/backend/pkg/provider/models'
@@ -42,6 +41,10 @@ interface ChatStore {
   streamingMessages: Record<number, StreamingMessageState>
   pendingTitleGenerations: Record<number, PendingTitleGeneration | undefined>
   sessionRunConfigs: Record<number, PendingTitleGeneration | undefined>
+  sessionToolIds: Record<number, string[] | undefined>
+  sessionToolLocks: Record<number, boolean | undefined>
+  loadSessionTools: (sessionId: number) => Promise<string[]>
+  saveSessionTools: (sessionId: number, ids: string[]) => Promise<void>
   pendingConfirms: Record<number, {
     requestId: string
     toolName: string
@@ -268,6 +271,26 @@ export const useChatStore = create<ChatStore>()((set, get) => {
   streamingMessages: {},
   pendingTitleGenerations: {},
   sessionRunConfigs: {},
+  sessionToolIds: {},
+  sessionToolLocks: {},
+  loadSessionTools: async (sessionId) => {
+    const result = await AgentBinding.GetSessionToolSettings({ session_id: sessionId })
+    if (!result) throw new Error('Unable to load session tools')
+    const ids = [...result.tool_ids]
+    set(state => ({
+      sessionToolIds: { ...state.sessionToolIds, [sessionId]: ids },
+      sessionToolLocks: { ...state.sessionToolLocks, [sessionId]: result.locked === true },
+    }))
+    return ids
+  },
+  saveSessionTools: async (sessionId, ids) => {
+    const result = await AgentBinding.SaveSessionToolSettings({ session_id: sessionId, tool_ids: ids })
+    if (!result) throw new Error('Unable to save session tools')
+    set(state => ({
+      sessionToolIds: { ...state.sessionToolIds, [sessionId]: [...result.tool_ids] },
+      sessionToolLocks: { ...state.sessionToolLocks, [sessionId]: result.locked === true },
+    }))
+  },
   pendingConfirms: {},
   sessionsLoading: false,
   hasMoreSessions: true,
@@ -444,6 +467,8 @@ export const useChatStore = create<ChatStore>()((set, get) => {
       const nextMessages = { ...state.messages }
       const nextPendingTitleGenerations = { ...state.pendingTitleGenerations }
       const nextSessionRunConfigs = { ...state.sessionRunConfigs }
+ const nextSessionToolIds = { ...state.sessionToolIds }
+ const nextSessionToolLocks = { ...state.sessionToolLocks }
       const nextPendingConfirms = { ...state.pendingConfirms }
       const nextStreamingMessages = { ...state.streamingMessages }
       const nextSessionStatuses = { ...state.sessionStatuses }
@@ -451,6 +476,8 @@ export const useChatStore = create<ChatStore>()((set, get) => {
       delete nextMessages[id]
       delete nextPendingTitleGenerations[id]
       delete nextSessionRunConfigs[id]
+ delete nextSessionToolIds[id]
+ delete nextSessionToolLocks[id]
       delete nextPendingConfirms[id]
       delete nextStreamingMessages[id]
       delete nextSessionStatuses[id]
@@ -461,6 +488,8 @@ export const useChatStore = create<ChatStore>()((set, get) => {
         messages: nextMessages,
         pendingTitleGenerations: nextPendingTitleGenerations,
         sessionRunConfigs: nextSessionRunConfigs,
+ sessionToolIds: nextSessionToolIds,
+ sessionToolLocks: nextSessionToolLocks,
         pendingConfirms: nextPendingConfirms,
         streamingMessages: nextStreamingMessages,
         sessionStatuses: nextSessionStatuses,
@@ -538,7 +567,7 @@ export const useChatStore = create<ChatStore>()((set, get) => {
     await get().sendMessage({sessionId, regenerateMessageId: responseId, content: question.content,
       attachments: question.attachments ?? [], baseUrl: provider.provider.base_url, apiKey: provider.provider.api_key,
       modelName: selected.model, providerType: provider.provider.provider_type,
-      enabledUserTools: useAppStore.getState().enabledToolIds})
+      enabledUserTools: await get().loadSessionTools(sessionId)})
   },
 
   sendMessage: async (params) => {

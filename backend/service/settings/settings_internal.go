@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
+	"github.com/reatang/fire-poker/backend/pkg/configfile"
 	"github.com/reatang/fire-poker/backend/pkg/dir"
 	"github.com/reatang/fire-poker/backend/pkg/global_hotkey"
 	"github.com/reatang/fire-poker/backend/pkg/ierror"
@@ -21,14 +22,14 @@ func (s *Settings) loadConfig() (*data_models.Config, error) {
 	}
 
 	configPath := filepath.Join(dataDir, dir.ConfigFileName)
-	bytes, err := os.ReadFile(configPath)
+	bytes, err := configfile.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			config := defaultConfig(dataDir)
-			if err := s.saveConfigToDir(dataDir, config); err != nil {
+			if err := configfile.Ensure(dataDir, config); err != nil {
 				return nil, ierror.Error(ierror.ErrSettingsSaveConfig, err)
 			}
-			return config, nil
+			return s.loadConfig()
 		}
 		return nil, ierror.Error(ierror.ErrSettingsReadConfig, err)
 	}
@@ -40,9 +41,8 @@ func (s *Settings) loadConfig() (*data_models.Config, error) {
 	if !strings.Contains(string(bytes), `"memory"`) {
 		config.Memory.Enabled = true
 	}
-	if config.DataDir == "" {
-		config.DataDir = dataDir
-	}
+	// The resolved directory is authoritative, including portable launch overrides.
+	config.DataDir = dataDir
 	if config.FontSize == "" {
 		config.FontSize = "md"
 	}
@@ -62,17 +62,8 @@ func (s *Settings) loadConfig() (*data_models.Config, error) {
 }
 
 // saveConfigToDir writes a config file into the provided directory.
-func (s *Settings) saveConfigToDir(targetDir string, config *data_models.Config) error {
-	if err := os.MkdirAll(targetDir, 0o755); err != nil {
-		return ierror.Error(ierror.ErrSettingsCreateDir, err)
-	}
-
-	content, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return ierror.Error(ierror.ErrSettingsSaveConfig, err)
-	}
-
-	return ierror.Error(ierror.ErrSettingsSaveConfig, os.WriteFile(filepath.Join(targetDir, dir.ConfigFileName), content, 0o644))
+func (s *Settings) saveConfigToDir(targetDir string, config *data_models.Config, fields ...string) error {
+	return ierror.Error(ierror.ErrSettingsSaveConfig, configfile.SaveFields(targetDir, config, fields...))
 }
 
 // defaultConfig builds the baseline config values used for first-time startup.

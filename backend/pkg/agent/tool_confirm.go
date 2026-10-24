@@ -169,6 +169,9 @@ func (m *Manager) decideToolConfirmation(ctx context.Context, input ToolConfirmD
 }
 
 func (m *Manager) lookupToolMeta(toolName string) (tools.ToolMeta, bool) {
+	if toolName == "shell" {
+		toolName = tools.ShellMeta().Name
+	}
 	if meta, ok := m.ToolRegistry().Get(toolName); ok {
 		return meta, true
 	}

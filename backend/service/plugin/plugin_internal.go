@@ -8,6 +8,7 @@ import (
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	pkgcli "github.com/reatang/fire-poker/backend/pkg/cli"
+	"github.com/reatang/fire-poker/backend/pkg/configfile"
 	"github.com/reatang/fire-poker/backend/pkg/dir"
 )
 
@@ -26,7 +27,7 @@ func (p *Plugin) loadConfig() (*data_models.Config, error) {
 	}
 
 	configPath := filepath.Join(dataDir, dir.ConfigFileName)
-	bytes, err := os.ReadFile(configPath)
+	bytes, err := configfile.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			cfg := &data_models.Config{
@@ -37,10 +38,10 @@ func (p *Plugin) loadConfig() (*data_models.Config, error) {
 				LogLevel:   "info",
 				Extensions: []data_models.ExtensionItem{},
 			}
-			if saveErr := p.saveConfig(cfg); saveErr != nil {
+			if saveErr := configfile.Ensure(dataDir, cfg); saveErr != nil {
 				return nil, saveErr
 			}
-			return cfg, nil
+			return p.loadConfig()
 		}
 		return nil, err
 	}
@@ -52,21 +53,12 @@ func (p *Plugin) loadConfig() (*data_models.Config, error) {
 	if cfg.Extensions == nil {
 		cfg.Extensions = []data_models.ExtensionItem{}
 	}
-	if cfg.DataDir == "" {
-		cfg.DataDir = dataDir
-	}
+	cfg.DataDir = dataDir
 	return cfg, nil
 }
 
 func (p *Plugin) saveConfig(config *data_models.Config) error {
-	if err := os.MkdirAll(config.DataDir, 0o755); err != nil {
-		return err
-	}
-	content, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(config.DataDir, dir.ConfigFileName), content, 0o644)
+	return configfile.SaveFields(config.DataDir, config, "extensions")
 }
 
 func findExtension(items []data_models.ExtensionItem, id string) (data_models.ExtensionItem, bool) {

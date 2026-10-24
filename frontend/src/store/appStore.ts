@@ -10,7 +10,7 @@ interface AppStore {
   theme: Theme
   fontSize: FontSize
   language: Language
-  enabledToolIds: string[]
+  enabledToolIds: string[] // Global defaults only; session overrides live in chatStore and SQLite.
   setTheme: (theme: Theme) => void
   setFontSize: (size: FontSize) => void
   setLanguage: (lang: Language) => void
@@ -19,7 +19,7 @@ interface AppStore {
 
 export const useAppStore = create<AppStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       theme: 'auto',
       fontSize: 'xl',
       language: 'zh-CN',
@@ -30,7 +30,11 @@ export const useAppStore = create<AppStore>()(
         i18n.changeLanguage(language)
         set({ language })
       },
-      setEnabledToolIds: (enabledToolIds) => set({ enabledToolIds }),
+      setEnabledToolIds: (enabledToolIds) => {
+        if (JSON.stringify(get().enabledToolIds) !== JSON.stringify(enabledToolIds)) {
+          set({ enabledToolIds })
+        }
+      },
     }),
     {
       name: 'fire-poker-app-settings',

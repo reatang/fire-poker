@@ -221,6 +221,7 @@ export class SettingsBootstrap {
     "quick_chat_shortcut": string;
     "default_provider_id": number;
     "version": string;
+    "default_tool_ids": string[];
 
     /** Creates a new SettingsBootstrap instance. */
     constructor($$source: Partial<SettingsBootstrap> = {}) {
@@ -248,6 +249,9 @@ export class SettingsBootstrap {
         if (!("version" in $$source)) {
             this["version"] = "";
         }
+        if (!("default_tool_ids" in $$source)) {
+            this["default_tool_ids"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -256,7 +260,11 @@ export class SettingsBootstrap {
      * Creates a new SettingsBootstrap instance from a string or object.
      */
     static createFrom($$source: any = {}): SettingsBootstrap {
+        const $$createField8_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("default_tool_ids" in $$parsedSource) {
+            $$parsedSource["default_tool_ids"] = $$createField8_0($$parsedSource["default_tool_ids"]);
+        }
         return new SettingsBootstrap($$parsedSource as Partial<SettingsBootstrap>);
     }
 }
@@ -302,3 +310,4 @@ export class SupportedProvider {
 const $$createType0 = Provider.createFrom;
 const $$createType1 = Model.createFrom;
 const $$createType2 = $Create.Array($$createType1);
+const $$createType3 = $Create.Array($Create.Any);

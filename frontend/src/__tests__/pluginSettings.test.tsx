@@ -6,6 +6,8 @@ import { SettingsApp } from '@/components/settings/SettingsApp'
 import i18n from '@/i18n'
 import { useAlertStore } from '@/alert/store'
 import { getSettingsInitialState, useSettingsStore } from '@/store/settingsStore'
+import { Settings } from '@bindings/github.com/reatang/fire-poker/backend/service/settings'
+import { SYSTEM_TOOLS_ID } from '@/types/settings'
 
 const {
   downloadNodeMock,
@@ -62,6 +64,7 @@ vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/provider', () =
 
 vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/plugin', () => ({
   Plugin: {
+    ListAvailableTools: vi.fn().mockResolvedValue({tools:[{id:'web_fetch',name:'web_fetch',description:'Fetch a URL',category:'builtin'}]}),
     ListExtensions: listExtensionsMock,
     GetExtensionDetail: getExtensionDetailMock,
     ToggleExtension: toggleExtensionMock,
@@ -73,6 +76,16 @@ vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/plugin', () => 
     CancelLoginCli: cancelLoginCliMock,
     SendLoginStdin: sendLoginStdinMock,
     ResizeLoginCli: resizeLoginCliMock,
+  },
+}))
+
+vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/settings', () => ({
+  Settings: {
+    LoadBootstrap: vi.fn().mockResolvedValue({bootstrap:{default_tool_ids:['web_fetch']}}),
+    SaveToolSettings: vi.fn(async (input:{default_tool_ids:string[]}) => {
+      vi.mocked(Settings.LoadBootstrap).mockResolvedValue({bootstrap:{default_tool_ids:input.default_tool_ids}} as Awaited<ReturnType<typeof Settings.LoadBootstrap>>)
+      return {default_tool_ids:input.default_tool_ids}
+    }),
   },
 }))
 
@@ -102,6 +115,7 @@ vi.mock('@wailsio/runtime', async (importOriginal) => {
 
 describe('Plugin settings', () => {
   beforeEach(async () => {
+    vi.mocked(Settings.LoadBootstrap).mockResolvedValue({bootstrap:{default_tool_ids:['web_fetch']}} as Awaited<ReturnType<typeof Settings.LoadBootstrap>>)
     window.history.replaceState({}, '', '/?entry=settings&tab=plugins')
     useAlertStore.getState().reset()
     useSettingsStore.setState({
@@ -176,6 +190,33 @@ describe('Plugin settings', () => {
 
     expect(await screen.findByRole('heading', { name: 'Plugins & Tools' })).toBeInTheDocument()
     expect(await screen.findByRole('heading', { name: /filesystem/ })).toBeInTheDocument()
+  })
+
+  it('opens system tools from the plugins list and preserves its selection across refreshes', async () => {
+    const user=userEvent.setup()
+    render(<SettingsApp />)
+    await screen.findByRole('heading',{name:/filesystem/})
+    await user.click(screen.getByRole('button',{name:'System tools'}))
+    expect(await screen.findByRole('heading',{name:'System tools'})).toBeInTheDocument()
+    const checkbox=await screen.findByRole('checkbox')
+    await waitFor(()=>expect(checkbox).toBeChecked())
+    await user.click(checkbox)
+    await user.click(screen.getByRole('button',{name:'Apply'}))
+    await waitFor(()=>expect(Settings.SaveToolSettings).toHaveBeenCalledWith({default_tool_ids:[]}))
+    act(()=>useSettingsStore.getState().setExtensions([...useSettingsStore.getState().extensions]))
+    expect(useSettingsStore.getState().selectedExtensionId).toBe(SYSTEM_TOOLS_ID)
+    expect(screen.getByRole('button',{name:'System tools'})).toHaveAttribute('aria-pressed','true')
+    expect(getExtensionDetailMock).not.toHaveBeenCalledWith({id:SYSTEM_TOOLS_ID})
+    await user.click(screen.getByRole('button',{name:'General'}))
+    expect(screen.queryByRole('button',{name:/System tools|Default tools/i})).not.toBeInTheDocument()
+  })
+
+  it('shows system tools even when no plugins have been imported', async () => {
+    listExtensionsMock.mockResolvedValue({extensions:[]})
+    render(<SettingsApp />)
+    expect(await screen.findByRole('heading',{name:'System tools'})).toBeInTheDocument()
+    expect(await screen.findByRole('checkbox')).toBeChecked()
+    expect(getExtensionDetailMock).not.toHaveBeenCalledWith({id:SYSTEM_TOOLS_ID})
   })
 
   it('shows a runtime reminder toast on the plugins tab when download was deferred', async () => {

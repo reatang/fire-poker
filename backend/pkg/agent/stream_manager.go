@@ -102,6 +102,16 @@ func (sm *StreamManager) IsActive(sessionID uint) bool {
 	return ok
 }
 
+// WhileInactive serializes a settings write with TryStart, closing the first-turn reservation race.
+func (sm *StreamManager) WhileInactive(sessionID uint, update func() error) error {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	if _, active := sm.streams[sessionID]; active {
+		return fmt.Errorf("对话正在开始或生成，不能修改工具选择")
+	}
+	return update()
+}
+
 func (sm *StreamManager) SendConfirmResponse(sessionID uint, resp ConfirmResponse) bool {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()

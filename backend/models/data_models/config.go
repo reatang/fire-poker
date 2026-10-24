@@ -37,6 +37,7 @@ type Config struct {
 	QuickChatShortcut string          `json:"quick_chat_shortcut"`
 	DefaultProviderID uint            `json:"default_provider_id"`
 	Extensions        []ExtensionItem `json:"extensions"`
+	DefaultToolIDs    []string        `json:"default_tool_ids"`
 	// DisabledSkills lists skill names the user has explicitly disabled.
 	DisabledSkills []string     `json:"disabled_skills,omitempty"`
 	Memory         MemoryConfig `json:"memory"`

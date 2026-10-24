@@ -643,6 +643,38 @@ export class RespondToConfirmOutput {
     }
 }
 
+/**
+ * SaveSessionToolsInput changes only the selected session's tools.
+ */
+export class SaveSessionToolsInput {
+    "session_id": number;
+    "tool_ids": string[];
+
+    /** Creates a new SaveSessionToolsInput instance. */
+    constructor($$source: Partial<SaveSessionToolsInput> = {}) {
+        if (!("session_id" in $$source)) {
+            this["session_id"] = 0;
+        }
+        if (!("tool_ids" in $$source)) {
+            this["tool_ids"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SaveSessionToolsInput instance from a string or object.
+     */
+    static createFrom($$source: any = {}): SaveSessionToolsInput {
+        const $$createField1_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("tool_ids" in $$parsedSource) {
+            $$parsedSource["tool_ids"] = $$createField1_0($$parsedSource["tool_ids"]);
+        }
+        return new SaveSessionToolsInput($$parsedSource as Partial<SaveSessionToolsInput>);
+    }
+}
+
 export class SendMessageInput {
     "regenerate_message_id"?: number;
     "session_id": number;
@@ -825,6 +857,62 @@ export class SessionPromptOutput {
     static createFrom($$source: any = {}): SessionPromptOutput {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         return new SessionPromptOutput($$parsedSource as Partial<SessionPromptOutput>);
+    }
+}
+
+/**
+ * SessionToolsInput identifies a session whose tool selection should be loaded.
+ */
+export class SessionToolsInput {
+    "session_id": number;
+
+    /** Creates a new SessionToolsInput instance. */
+    constructor($$source: Partial<SessionToolsInput> = {}) {
+        if (!("session_id" in $$source)) {
+            this["session_id"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SessionToolsInput instance from a string or object.
+     */
+    static createFrom($$source: any = {}): SessionToolsInput {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new SessionToolsInput($$parsedSource as Partial<SessionToolsInput>);
+    }
+}
+
+/**
+ * SessionToolsOutput returns a concrete selection; an empty array means all selectable tools are off.
+ */
+export class SessionToolsOutput {
+    "tool_ids": string[];
+    "locked": boolean;
+
+    /** Creates a new SessionToolsOutput instance. */
+    constructor($$source: Partial<SessionToolsOutput> = {}) {
+        if (!("tool_ids" in $$source)) {
+            this["tool_ids"] = [];
+        }
+        if (!("locked" in $$source)) {
+            this["locked"] = false;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SessionToolsOutput instance from a string or object.
+     */
+    static createFrom($$source: any = {}): SessionToolsOutput {
+        const $$createField0_0 = $$createType0;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("tool_ids" in $$parsedSource) {
+            $$parsedSource["tool_ids"] = $$createField0_0($$parsedSource["tool_ids"]);
+        }
+        return new SessionToolsOutput($$parsedSource as Partial<SessionToolsOutput>);
     }
 }
 

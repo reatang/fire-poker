@@ -97,7 +97,7 @@ func main() {
 			log.Printf("quick chat toggle failed: %v", err)
 		}
 	}, quickChatShortcut)
-	settingsService := settings.NewSettings(settings.Dependencies{QuickChatShortcuts: quickChatService})
+	settingsService := settings.NewSettings(settings.Dependencies{QuickChatShortcuts: quickChatService, SessionToolDefaults: istorage})
 	agentService := agentSvc.NewAgent(istorage, agentSvc.Dependencies{
 		SkillProvider:        skillsManager,
 		AttentionRequester:   notificationService,

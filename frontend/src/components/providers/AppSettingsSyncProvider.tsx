@@ -26,16 +26,22 @@ export function AppSettingsSyncProvider({ children }: { children: React.ReactNod
           return
         }
 
-        if (nextState.language) {
+        if (nextState.language && nextState.language !== i18n.language) {
           void i18n.changeLanguage(nextState.language)
         }
 
-        useAppStore.setState((state) => ({
+        const state = useAppStore.getState()
+        const updated = {
           theme: nextState.theme ?? state.theme,
           fontSize: nextState.fontSize ?? state.fontSize,
           language: nextState.language ?? state.language,
           enabledToolIds: nextState.enabledToolIds ?? state.enabledToolIds,
-        }))
+        }
+        if (updated.theme !== state.theme || updated.fontSize !== state.fontSize
+          || updated.language !== state.language
+          || JSON.stringify(updated.enabledToolIds) !== JSON.stringify(state.enabledToolIds)) {
+          useAppStore.setState(updated)
+        }
       } catch {
         // Ignore malformed cross-window storage payloads.
       }

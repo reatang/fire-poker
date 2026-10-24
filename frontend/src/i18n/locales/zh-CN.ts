@@ -73,6 +73,10 @@ export default {
       reset: '恢复默认',
     },
     plugins: {
+      systemTools: {
+        title: '系统工具',
+        description: '查看工具列表，设置新会话默认启用的工具。',
+      },
       title: '插件与工具',
       emptyDescription: '选择一个已导入的 mcp 工具或插件以查看详细信息。',
       add: '添加',
@@ -237,6 +241,14 @@ export default {
       xl: 'XL',
     },
     general: {
+      tools: {
+        title: '默认工具',
+        locked: '对话开始后不能修改工具选择，如需调整请新建对话。',
+        description: '选择新会话默认启用的工具。每个会话独立保存工具选择，修改这里不会改变已有会话。',
+        loadError: '无法加载工具设置，请重试。',
+        saveError: '工具设置保存失败，请重试。',
+        empty: '当前没有可用工具。',
+      },
       display: {
         title: '显示设置',
         description: '调整应用阅读字号，并在应用前预览实际效果。',
@@ -446,6 +458,18 @@ export default {
       fileWrite: {
         name: '写入文件',
         description: '将内容写入指定路径的文件',
+      },
+      windowsShell: {
+        name: 'Windows PowerShell',
+        description: '执行 Windows 命令，优先 PowerShell 7，其次 Windows PowerShell',
+      },
+      macosShell: {
+        name: 'macOS 命令行',
+        description: '执行 macOS 命令，优先 zsh，其次 bash 或 sh',
+      },
+      linuxShell: {
+        name: 'Linux 命令行',
+        description: '执行 Linux 命令，优先 bash，其次 sh',
       },
       shell: {
         name: '执行命令',

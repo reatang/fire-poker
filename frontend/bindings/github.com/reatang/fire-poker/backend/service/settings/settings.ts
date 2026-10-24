@@ -60,11 +60,20 @@ export function SaveShortcutSettings(input: settings_dto$0.SaveShortcutSettingsI
 }
 
 /**
+ * SaveToolSettings persists application defaults without updating any existing session.
+ */
+export function SaveToolSettings(input: settings_dto$0.SaveToolSettingsInput): $CancellablePromise<settings_dto$0.SaveToolSettingsOutput | null> {
+    return $Call.ByID(2452483437, input).then(($result: any) => {
+        return $$createType11($result);
+    });
+}
+
+/**
  * ValidateShortcutSettings checks whether a quick chat shortcut can be used.
  */
 export function ValidateShortcutSettings(input: settings_dto$0.ValidateShortcutSettingsInput): $CancellablePromise<settings_dto$0.ValidateShortcutSettingsOutput | null> {
     return $Call.ByID(3419218414, input).then(($result: any) => {
-        return $$createType11($result);
+        return $$createType13($result);
     });
 }
 
@@ -79,5 +88,7 @@ const $$createType6 = settings_dto$0.SaveLocaleSettingsOutput.createFrom;
 const $$createType7 = $Create.Nullable($$createType6);
 const $$createType8 = settings_dto$0.SaveShortcutSettingsOutput.createFrom;
 const $$createType9 = $Create.Nullable($$createType8);
-const $$createType10 = settings_dto$0.ValidateShortcutSettingsOutput.createFrom;
+const $$createType10 = settings_dto$0.SaveToolSettingsOutput.createFrom;
 const $$createType11 = $Create.Nullable($$createType10);
+const $$createType12 = settings_dto$0.ValidateShortcutSettingsOutput.createFrom;
+const $$createType13 = $Create.Nullable($$createType12);

@@ -29,7 +29,7 @@ func TestRegenerationReplaysPrefixAndDoesNotDuplicateQuestion(t *testing.T) {
 	before, _ := m.Storage().ListMessagesForSession(s.ID, 0, 100)
 	target := before[len(before)-1]
 	r := newDelayedRunner()
-	m.runners["http://test/model"] = r
+	injectSessionRunner(t, m, s.ID, "http://test", "model", "openai_compatibility", r)
 	h := NewChatHandler(m)
 	p := SendMessageParams{SessionID: s.ID, RegenerateMessageID: target.ID, Content: "must be ignored", BaseURL: "http://test", ModelName: "model", ProviderType: "openai_compatibility"}
 	if err := h.SendMessage(context.Background(), p); err != nil {
@@ -69,7 +69,7 @@ func TestRegenerationStartFailurePreservesAnswer(t *testing.T) {
 	s, _ := m.Storage().CreateSession(data_models.Session{Title: "retry failure"})
 	m.Storage().CreateMessage(data_models.Message{SessionID: s.ID, Role: "user", ContentType: "text", Content: "question"})
 	answer, _ := m.Storage().CreateMessage(data_models.Message{SessionID: s.ID, Role: "assistant", ContentType: "text", Content: "keep answer"})
-	m.runners["http://test/model"] = &failingRegenerationRunner{newDelayedRunner()}
+	injectSessionRunner(t, m, s.ID, "http://test", "model", "", &failingRegenerationRunner{newDelayedRunner()})
 	err := NewChatHandler(m).SendMessage(context.Background(), SendMessageParams{SessionID: s.ID, RegenerateMessageID: answer.ID, BaseURL: "http://test", ModelName: "model"})
 	if err == nil {
 		t.Fatal("expected runner failure")

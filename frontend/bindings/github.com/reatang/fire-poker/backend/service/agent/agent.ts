@@ -44,57 +44,75 @@ export function GetSessionPrompt(input: agent_dto$0.SessionPromptInput): $Cancel
     });
 }
 
+/**
+ * GetSessionToolSettings loads this session's independent tool selection.
+ */
+export function GetSessionToolSettings(input: agent_dto$0.SessionToolsInput): $CancellablePromise<agent_dto$0.SessionToolsOutput | null> {
+    return $Call.ByID(1648565950, input).then(($result: any) => {
+        return $$createType11($result);
+    });
+}
+
 export function GetSystemPrompt(input: agent_dto$0.PromptLibraryInput): $CancellablePromise<agent_dto$0.PromptOutput | null> {
     return $Call.ByID(3285440076, input).then(($result: any) => {
-        return $$createType11($result);
+        return $$createType13($result);
     });
 }
 
 export function ListSessions(input: agent_dto$0.ListSessionsInput): $CancellablePromise<agent_dto$0.ListSessionsOutput | null> {
     return $Call.ByID(256611200, input).then(($result: any) => {
-        return $$createType13($result);
+        return $$createType15($result);
     });
 }
 
 export function ListSystemPrompts(): $CancellablePromise<agent_dto$0.PromptLibraryOutput | null> {
     return $Call.ByID(3618110735).then(($result: any) => {
-        return $$createType15($result);
+        return $$createType17($result);
     });
 }
 
 export function LoadSessionMessages(input: agent_dto$0.LoadSessionMessagesInput): $CancellablePromise<agent_dto$0.LoadSessionMessagesOutput | null> {
     return $Call.ByID(4228419491, input).then(($result: any) => {
-        return $$createType17($result);
+        return $$createType19($result);
     });
 }
 
 export function MarkSessionRead(input: agent_dto$0.MarkSessionReadInput): $CancellablePromise<agent_dto$0.MarkSessionReadOutput | null> {
     return $Call.ByID(3606550672, input).then(($result: any) => {
-        return $$createType19($result);
+        return $$createType21($result);
     });
 }
 
 export function RenameSession(input: agent_dto$0.RenameSessionInput): $CancellablePromise<agent_dto$0.RenameSessionOutput | null> {
     return $Call.ByID(4094471117, input).then(($result: any) => {
-        return $$createType21($result);
+        return $$createType23($result);
     });
 }
 
 export function RespondToConfirm(input: agent_dto$0.RespondToConfirmInput): $CancellablePromise<agent_dto$0.RespondToConfirmOutput | null> {
     return $Call.ByID(644046717, input).then(($result: any) => {
-        return $$createType23($result);
+        return $$createType25($result);
+    });
+}
+
+/**
+ * SaveSessionToolSettings persists a session override without modifying global defaults.
+ */
+export function SaveSessionToolSettings(input: agent_dto$0.SaveSessionToolsInput): $CancellablePromise<agent_dto$0.SessionToolsOutput | null> {
+    return $Call.ByID(1716815819, input).then(($result: any) => {
+        return $$createType11($result);
     });
 }
 
 export function SaveSystemPrompt(input: agent_dto$0.PromptLibraryInput): $CancellablePromise<agent_dto$0.PromptOutput | null> {
     return $Call.ByID(2607392455, input).then(($result: any) => {
-        return $$createType11($result);
+        return $$createType13($result);
     });
 }
 
 export function SendMessage(input: agent_dto$0.SendMessageInput): $CancellablePromise<agent_dto$0.SendMessageOutput | null> {
     return $Call.ByID(2729511166, input).then(($result: any) => {
-        return $$createType25($result);
+        return $$createType27($result);
     });
 }
 
@@ -103,19 +121,19 @@ export function SendMessage(input: agent_dto$0.SendMessageInput): $CancellablePr
  */
 export function SpawnTaskSession(input: agent_dto$0.SpawnTaskSessionInput): $CancellablePromise<agent_dto$0.SpawnTaskSessionOutput | null> {
     return $Call.ByID(2050909311, input).then(($result: any) => {
-        return $$createType27($result);
+        return $$createType29($result);
     });
 }
 
 export function StopGeneration(input: agent_dto$0.StopGenerationInput): $CancellablePromise<agent_dto$0.StopGenerationOutput | null> {
     return $Call.ByID(1096238695, input).then(($result: any) => {
-        return $$createType29($result);
+        return $$createType31($result);
     });
 }
 
 export function ToggleStarSession(input: agent_dto$0.ToggleStarSessionInput): $CancellablePromise<agent_dto$0.ToggleStarSessionOutput | null> {
     return $Call.ByID(266756995, input).then(($result: any) => {
-        return $$createType31($result);
+        return $$createType33($result);
     });
 }
 
@@ -136,25 +154,27 @@ const $$createType6 = agent_dto$0.GenerateTitleOutput.createFrom;
 const $$createType7 = $Create.Nullable($$createType6);
 const $$createType8 = agent_dto$0.SessionPromptOutput.createFrom;
 const $$createType9 = $Create.Nullable($$createType8);
-const $$createType10 = agent_dto$0.PromptOutput.createFrom;
+const $$createType10 = agent_dto$0.SessionToolsOutput.createFrom;
 const $$createType11 = $Create.Nullable($$createType10);
-const $$createType12 = agent_dto$0.ListSessionsOutput.createFrom;
+const $$createType12 = agent_dto$0.PromptOutput.createFrom;
 const $$createType13 = $Create.Nullable($$createType12);
-const $$createType14 = agent_dto$0.PromptLibraryOutput.createFrom;
+const $$createType14 = agent_dto$0.ListSessionsOutput.createFrom;
 const $$createType15 = $Create.Nullable($$createType14);
-const $$createType16 = agent_dto$0.LoadSessionMessagesOutput.createFrom;
+const $$createType16 = agent_dto$0.PromptLibraryOutput.createFrom;
 const $$createType17 = $Create.Nullable($$createType16);
-const $$createType18 = agent_dto$0.MarkSessionReadOutput.createFrom;
+const $$createType18 = agent_dto$0.LoadSessionMessagesOutput.createFrom;
 const $$createType19 = $Create.Nullable($$createType18);
-const $$createType20 = agent_dto$0.RenameSessionOutput.createFrom;
+const $$createType20 = agent_dto$0.MarkSessionReadOutput.createFrom;
 const $$createType21 = $Create.Nullable($$createType20);
-const $$createType22 = agent_dto$0.RespondToConfirmOutput.createFrom;
+const $$createType22 = agent_dto$0.RenameSessionOutput.createFrom;
 const $$createType23 = $Create.Nullable($$createType22);
-const $$createType24 = agent_dto$0.SendMessageOutput.createFrom;
+const $$createType24 = agent_dto$0.RespondToConfirmOutput.createFrom;
 const $$createType25 = $Create.Nullable($$createType24);
-const $$createType26 = agent_dto$0.SpawnTaskSessionOutput.createFrom;
+const $$createType26 = agent_dto$0.SendMessageOutput.createFrom;
 const $$createType27 = $Create.Nullable($$createType26);
-const $$createType28 = agent_dto$0.StopGenerationOutput.createFrom;
+const $$createType28 = agent_dto$0.SpawnTaskSessionOutput.createFrom;
 const $$createType29 = $Create.Nullable($$createType28);
-const $$createType30 = agent_dto$0.ToggleStarSessionOutput.createFrom;
+const $$createType30 = agent_dto$0.StopGenerationOutput.createFrom;
 const $$createType31 = $Create.Nullable($$createType30);
+const $$createType32 = agent_dto$0.ToggleStarSessionOutput.createFrom;
+const $$createType33 = $Create.Nullable($$createType32);

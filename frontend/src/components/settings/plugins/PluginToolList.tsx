@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { ChevronDown, Loader2, Plus } from 'lucide-react'
+import { ChevronDown, Loader2, Plus, Wrench } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { PluginToolListItem } from '@/components/settings/plugins/PluginToolListItem'
 import { useCliInstallStore } from '@/store/cliInstallStore'
 import type { ExtensionItem } from '@/types/settings'
+import { SYSTEM_TOOLS_ID } from '@/types/settings'
+import { cn } from '@/lib/utils'
 
 export function PluginToolList(props: {
   items: ExtensionItem[]
@@ -65,6 +67,22 @@ export function PluginToolList(props: {
       )}
 
       <div className="space-y-2">
+        <button
+          type="button"
+          aria-label={t('settingsPage.plugins.systemTools.title')}
+          aria-pressed={props.selectedId === SYSTEM_TOOLS_ID}
+          onClick={() => props.onSelect(SYSTEM_TOOLS_ID)}
+          className={cn(
+            'flex w-full items-start gap-3 rounded-2xl px-3 py-3 text-left transition-colors',
+            props.selectedId === SYSTEM_TOOLS_ID ? 'bg-primary/10 text-primary' : 'bg-background hover:bg-accent',
+          )}
+        >
+          <Wrench size={16} className="mt-0.5 shrink-0" />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium">{t('settingsPage.plugins.systemTools.title')}</span>
+            <span className="mt-1 block text-xs text-muted-foreground">{t('settingsPage.plugins.systemTools.description')}</span>
+          </span>
+        </button>
         {pendingInstalls.map((install) => (
           <div key={`installing:${install.npm_package}`} className="rounded-2xl bg-accent/50 px-3 py-3">
             <div className="flex items-center gap-2">

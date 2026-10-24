@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
+	"github.com/reatang/fire-poker/backend/pkg/configfile"
 	"github.com/reatang/fire-poker/backend/pkg/dir"
 	"github.com/reatang/fire-poker/backend/service/memory/memory_dto"
 )
@@ -58,7 +59,7 @@ func (m *Memory) loadConfig() (*data_models.Config, error) {
 		return nil, err
 	}
 	config := &data_models.Config{}
-	bytes, err := os.ReadFile(filepath.Join(dataDir, dir.ConfigFileName))
+	bytes, err := configfile.ReadFile(filepath.Join(dataDir, dir.ConfigFileName))
 	if err != nil {
 		if os.IsNotExist(err) {
 			config.DataDir = dataDir
@@ -73,9 +74,7 @@ func (m *Memory) loadConfig() (*data_models.Config, error) {
 	if !strings.Contains(string(bytes), `"memory"`) {
 		config.Memory.Enabled = true
 	}
-	if config.DataDir == "" {
-		config.DataDir = dataDir
-	}
+	config.DataDir = dataDir
 	return config, nil
 }
 
@@ -89,12 +88,5 @@ func (m *Memory) saveConfig(config *data_models.Config) error {
 		}
 		config.DataDir = dataDir
 	}
-	if err := os.MkdirAll(dataDir, 0o755); err != nil {
-		return err
-	}
-	content, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(dataDir, dir.ConfigFileName), content, 0o644)
+	return configfile.SaveFields(dataDir, config, "memory")
 }

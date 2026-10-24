@@ -44,7 +44,7 @@ func TestToolConfirmCallbackWaitsForApprovalBeforeContinuing(t *testing.T) {
 	var callbackErr error
 	go func() {
 		result, err := callbacks.RunBeforeTool(ctx, &toolpkg.BeforeToolArgs{
-			ToolName:  "shell",
+			ToolName:  tools.ShellMeta().Name,
 			Arguments: args,
 		})
 		callbackErr = err
@@ -121,7 +121,7 @@ func TestToolConfirmCallbackSkipsSafeShellCommand(t *testing.T) {
 	callbacks := manager.newToolCallbacks()
 
 	result, err := callbacks.RunBeforeTool(ctx, &toolpkg.BeforeToolArgs{
-		ToolName:  "shell",
+		ToolName:  tools.ShellMeta().Name,
 		Arguments: []byte(`{"command":"pwd"}`),
 	})
 	if err != nil {
@@ -161,7 +161,7 @@ func TestToolConfirmCallbackDeniesDestructiveShellCommand(t *testing.T) {
 	callbacks := manager.newToolCallbacks()
 
 	result, err := callbacks.RunBeforeTool(ctx, &toolpkg.BeforeToolArgs{
-		ToolName:  "shell",
+		ToolName:  tools.ShellMeta().Name,
 		Arguments: []byte(`{"command":"rm -rf ~/Documents/reports"}`),
 	})
 	if err != nil {
@@ -208,7 +208,7 @@ func TestToolConfirmCallbackDeniesChainedDestructiveShellCommand(t *testing.T) {
 	callbacks := manager.newToolCallbacks()
 
 	result, err := callbacks.RunBeforeTool(ctx, &toolpkg.BeforeToolArgs{
-		ToolName:  "shell",
+		ToolName:  tools.ShellMeta().Name,
 		Arguments: []byte(`{"command":"ls ~/Downloads ; rm -rf ~/Documents/reports"}`),
 	})
 	if err != nil {
@@ -228,7 +228,7 @@ func TestToolConfirmCallbackDeniesChainedDestructiveShellCommand(t *testing.T) {
 
 func TestToolConfirmCallbackUsesDynamicDeciderForNonStaticTools(t *testing.T) {
 	manager := NewManager(newTestStorage(t))
-	manager.ToolRegistry().Register(tools.ToolMeta{
+	registerTestTool(t, manager.ToolRegistry(), tools.ToolMeta{
 		Name:        "dynamic_tool",
 		Description: "test tool",
 		Category:    tools.CategoryBuiltin,
@@ -306,7 +306,7 @@ func TestToolConfirmCallbackUsesDynamicDeciderForNonStaticTools(t *testing.T) {
 
 func TestToolConfirmCallbackSkipsWhenDynamicDeciderAllowsExecution(t *testing.T) {
 	manager := NewManager(newTestStorage(t))
-	manager.ToolRegistry().Register(tools.ToolMeta{
+	registerTestTool(t, manager.ToolRegistry(), tools.ToolMeta{
 		Name:        "safe_tool",
 		Description: "test tool",
 		Category:    tools.CategoryBuiltin,
@@ -391,7 +391,7 @@ func TestToolConfirmCallbackReturnsSyntheticResultOnReject(t *testing.T) {
 	var callbackErr error
 	go func() {
 		result, err := callbacks.RunBeforeTool(ctx, &toolpkg.BeforeToolArgs{
-			ToolName:  "shell",
+			ToolName:  tools.ShellMeta().Name,
 			Arguments: args,
 		})
 		callbackErr = err
@@ -503,7 +503,7 @@ func TestToolConfirmCallbackSkipsExecutionWhenApprovedWithComment(t *testing.T) 
 	var resultCtx context.Context
 	go func() {
 		result, err := callbacks.RunBeforeTool(ctx, &toolpkg.BeforeToolArgs{
-			ToolName:  "shell",
+			ToolName:  tools.ShellMeta().Name,
 			Arguments: args,
 		})
 		callbackErr = err
@@ -555,11 +555,11 @@ func TestToolConfirmCallbackSkipsExecutionWhenApprovedWithComment(t *testing.T) 
 	}
 
 	msgs, err := callbacks.RunToolResultMessages(resultCtx, &toolpkg.ToolResultMessagesInput{
-		ToolName: "shell",
+		ToolName: tools.ShellMeta().Name,
 		DefaultToolMessage: model.Message{
 			Role:     model.RoleTool,
 			ToolID:   "call_shell_1",
-			ToolName: "shell",
+			ToolName: tools.ShellMeta().Name,
 			Content:  `{"status":"user_comment"}`,
 		},
 	})

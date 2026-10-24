@@ -12,6 +12,8 @@ export {
     SaveLocaleSettingsOutput,
     SaveShortcutSettingsInput,
     SaveShortcutSettingsOutput,
+    SaveToolSettingsInput,
+    SaveToolSettingsOutput,
     ValidateShortcutSettingsInput,
     ValidateShortcutSettingsOutput
 } from "./models.js";

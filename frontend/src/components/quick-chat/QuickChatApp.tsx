@@ -4,12 +4,10 @@ import { Events, Window as RuntimeWindow } from '@wailsio/runtime'
 import { ArrowUp, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Agent as AgentBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/agent'
-import { Plugin as PluginBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/plugin'
 import { Provider as ProviderBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/provider'
 import { Window } from '@bindings/github.com/reatang/fire-poker/backend/service/window'
 import { cn } from '@/lib/utils'
 import { ChatContent } from '@/components/chat/ChatArea'
-import { useAppStore } from '@/store/appStore'
 import { useChatStore } from '@/store/chatStore'
 import type { Conversation } from '@/types'
 import { preferredModel } from '@/lib/modelSelection'
@@ -35,7 +33,7 @@ function latestContinuableConversation(conversations: Conversation[]): Conversat
   return conversations.find((conversation) => conversation.kind === 'user') ?? null
 }
 
-async function loadQuickChatRunConfig() {
+async function loadQuickChatRunConfig(sessionId: number) {
   const providersResult = await ProviderBinding.ProviderAndModelList({})
   const providerModels = providersResult?.provider_models ?? []
   await useModelSelectionStore.persist.rehydrate()
@@ -44,11 +42,7 @@ async function loadQuickChatRunConfig() {
 
   if (!defaultProvider || !defaultModel) return null
 
-  const toolsResult = await PluginBinding.ListAvailableTools({})
-  const enabledToolIds = useAppStore.getState().enabledToolIds
-  const enabledUserTools = (toolsResult?.tools ?? [])
-    .filter(tool => tool.category !== 'builtin' && enabledToolIds.includes(tool.id))
-    .map(tool => tool.id)
+  const enabledUserTools = await useChatStore.getState().loadSessionTools(sessionId)
 
   return {
     baseUrl: defaultProvider.provider.base_url,
@@ -154,7 +148,7 @@ export function QuickChatApp() {
       const sessionId = await resolveSessionId()
       if (sessionId <= 0) return
 
-      const runConfig = await loadQuickChatRunConfig()
+      const runConfig = await loadQuickChatRunConfig(sessionId)
       if (!runConfig) return
 
       setActiveSessionId(sessionId)

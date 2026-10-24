@@ -7,11 +7,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/reatang/fire-poker/backend/pkg/agent/toolkit"
 	pkgterminal "github.com/reatang/fire-poker/backend/pkg/terminal"
 	"trpc.group/trpc-go/trpc-agent-go/tool/function"
 )
@@ -59,44 +61,36 @@ func resolveShellTimeout(seconds int) time.Duration {
 }
 
 func resolveShellCommand(command string) (string, []string) {
-	if runtime.GOOS == "windows" {
-		shell := os.Getenv("ComSpec")
-		if shell == "" {
-			shell = "cmd.exe"
-		}
-		return shell, []string{"/d", "/s", "/c", command}
-	}
-	if shell := os.Getenv("SHELL"); shell != "" {
-		return shell, []string{"-lc", command}
-	}
-	for _, candidate := range []string{
-		"bash",
-		"zsh",
-		"sh",
-		"/usr/bin/bash",
-		"/bin/bash",
-		"/usr/bin/zsh",
-		"/bin/zsh",
-		"/usr/bin/sh",
-		"/bin/sh",
-	} {
-		if candidate == "" {
-			continue
-		}
-		if shellCandidateAvailable(candidate) {
-			return candidate, []string{"-lc", command}
-		}
-	}
-	return "sh", []string{"-lc", command}
+	return resolvePlatformShellCommand(runtime.GOOS, command, os.Getenv, exec.LookPath)
 }
 
-func shellCandidateAvailable(candidate string) bool {
-	if strings.Contains(candidate, "/") {
-		info, err := os.Stat(candidate)
-		return err == nil && !info.IsDir()
+// Resolve within the host's shell family; Windows never silently switches to cmd syntax.
+func resolvePlatformShellCommand(goos, command string, getenv func(string) string, lookPath func(string) (string, error)) (string, []string) {
+	candidates := []string{"bash", "/bin/bash", "sh", "/bin/sh"}
+	args := []string{"-lc", command}
+	if goos == "darwin" {
+		candidates = []string{"zsh", "/bin/zsh", "bash", "/bin/bash", "sh", "/bin/sh"}
 	}
-	_, err := exec.LookPath(candidate)
-	return err == nil
+	if goos == "windows" {
+		candidates = []string{"pwsh.exe"}
+		for _, key := range []string{"ProgramW6432", "ProgramFiles", "LOCALAPPDATA"} {
+			if root := getenv(key); root != "" {
+				candidates = append(candidates, filepath.Join(root, "PowerShell", "7", "pwsh.exe"))
+			}
+		}
+		candidates = append(candidates, "powershell.exe")
+		if root := getenv("SystemRoot"); root != "" {
+			candidates = append(candidates, filepath.Join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"))
+		}
+		args = []string{"-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command}
+	}
+	for _, candidate := range candidates {
+		if resolved, err := lookPath(candidate); err == nil {
+			return resolved, args
+		}
+	}
+	// Let process creation report the missing native shell instead of using a foreign tool.
+	return candidates[0], args
 }
 
 func resolveShellWorkDir(workDir string) string {
@@ -179,7 +173,7 @@ func shellFuncTerminal(ctx context.Context, emitter ShellProgressEmitter, sessio
 	}
 	output := stdout.String()
 	if emitter != nil && sessionID != 0 {
-		emitter.EmitToolResult(sessionID, "shell", output)
+		emitter.EmitToolResult(sessionID, toolkit.PlatformShellToolID(), output)
 	}
 	exitCode := 0
 	if finalInfo.ExitCode != nil {
@@ -232,7 +226,7 @@ func shellFuncPipe(ctx context.Context, emitter ShellProgressEmitter, sessionID 
 			stderr.WriteString(chunk.text)
 		}
 		if emitter != nil && sessionID != 0 {
-			emitter.EmitToolResult(sessionID, "shell", formatShellProgress(stdout.String(), stderr.String()))
+			emitter.EmitToolResult(sessionID, toolkit.PlatformShellToolID(), formatShellProgress(stdout.String(), stderr.String()))
 		}
 	}
 
@@ -292,24 +286,40 @@ func formatShellProgress(stdout, stderr string) string {
 
 // NewShellTool builds the agent tool that executes shell commands.
 func NewShellTool(emitter ShellProgressEmitter, sessionID uint, terminalRunner ...ShellTerminalRunner) *function.FunctionTool[shellInput, shellOutput] {
+	switch runtime.GOOS {
+	case "windows":
+		return NewWindowsShellTool(emitter, sessionID, terminalRunner...)
+	case "darwin":
+		return NewMacOSShellTool(emitter, sessionID, terminalRunner...)
+	case "linux":
+		return NewLinuxShellTool(emitter, sessionID, terminalRunner...)
+	default:
+		return newPlatformShellTool(runtime.GOOS, emitter, sessionID, terminalRunner...)
+	}
+}
+
+func newPlatformShellTool(goos string, emitter ShellProgressEmitter, sessionID uint, terminalRunner ...ShellTerminalRunner) *function.FunctionTool[shellInput, shellOutput] {
 	var runner ShellTerminalRunner
 	if len(terminalRunner) > 0 {
 		runner = terminalRunner[0]
 	}
 	return function.NewFunctionTool(
 		func(ctx context.Context, input shellInput) (shellOutput, error) {
+			if goos != runtime.GOOS || platformShellName(goos) == "" {
+				return shellOutput{}, fmt.Errorf("%s shell tool is disabled on %s", goos, runtime.GOOS)
+			}
 			return shellFuncWithTerminal(ctx, emitter, sessionID, input, runner)
 		},
-		function.WithName("shell"),
-		function.WithDescription("Internal system execution tool for complex user tasks such as organizing folders, searching local files, summarizing local materials, or calling fixed local utilities. Do not ask the user to write shell commands. Prefer safe read-only commands for inspection, and explain user-facing results in plain language. Commands run in the shared interactive terminal backend when available. Set use_pty=true for commands that render terminal UI, print QR codes, or wait for login confirmation. Set show_terminal=true only when the terminal should be visible to the user, and keep_terminal=true only when it should remain visible after exit."),
+		function.WithName(platformShellName(goos)),
+		function.WithDescription(platformShellDescription(goos)+" Do not ask the user to write shell commands. Commands run in the shared interactive terminal backend when available. Set use_pty=true for interactive commands. Set show_terminal=true only when the terminal should be visible, and keep_terminal=true only when it should remain visible after exit."),
 	)
 }
 
 // ShellMeta returns metadata for presenting the shell tool in confirmations.
 func ShellMeta() ToolMeta {
 	return ToolMeta{
-		Name:            "shell",
-		Description:     "Execute shell commands",
+		Name:            toolkit.PlatformShellToolID(),
+		Description:     platformShellDescription(runtime.GOOS),
 		Category:        CategoryBuiltin,
 		RequiresConfirm: true,
 		FormatPurpose: func(args json.RawMessage) string {

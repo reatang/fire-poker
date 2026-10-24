@@ -15,7 +15,7 @@ func TestFirstQuestionSnapshotsCurrentBrandDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := newDelayedRunner()
-	m.runners["http://test/brand"] = r
+	injectSessionRunner(t, m, s.ID, "http://test", "brand", "", r)
 	if err := NewChatHandler(m).SendMessage(context.Background(), SendMessageParams{SessionID: s.ID, Content: "hello", BaseURL: "http://test", ModelName: "brand"}); err != nil {
 		t.Fatal(err)
 	}

@@ -156,13 +156,13 @@ func TestPerSessionInstructionsDoNotLeakThroughCachedRunner(t *testing.T) {
 	t.Setenv("FIRE_POKER_DATA_DIR", t.TempDir())
 	m := NewManager(newTestStorage(t))
 	r := newDelayedRunner()
-	m.runners["https://example.test/model"] = r
 	h := NewChatHandler(m)
 	for _, instruction := range []string{"你是架构顾问", "你是写作教练", ""} {
 		s, err := m.Storage().CreateSession(data_models.Session{Title: "isolated", SystemPrompt: instruction})
 		if err != nil {
 			t.Fatal(err)
 		}
+		injectSessionRunner(t, m, s.ID, "https://example.test", "model", "", r)
 		if err := h.SendMessage(context.Background(), SendMessageParams{SessionID: s.ID, Content: "你好", BaseURL: "https://example.test", ModelName: "model"}); err != nil {
 			t.Fatal(err)
 		}

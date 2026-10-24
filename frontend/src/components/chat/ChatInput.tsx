@@ -32,6 +32,7 @@ import { AttachmentChips } from './AttachmentChips'
 import { ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_BYTES, inferAttachmentMeta } from '@/lib/attachments'
 import { preferredModel, preferredProviderModel } from '@/lib/modelSelection'
 import { useModelSelectionStore } from '@/store/modelSelectionStore'
+import { loadToolDefaults, TOOL_I18N_KEYS } from '@/lib/toolSettings'
 
 const SlashCommand = Extension.create({
   name: 'slashCommand',
@@ -54,37 +55,6 @@ type ChatToolOption = {
   description: string
   category: string
   enabled: boolean
-}
-
-const TOOL_I18N_KEYS: Record<string, { name: string; description: string }> = {
-  datetime: {
-    name: 'input.toolNames.datetime.name',
-    description: 'input.toolNames.datetime.description',
-  },
-  file_read: {
-    name: 'input.toolNames.fileRead.name',
-    description: 'input.toolNames.fileRead.description',
-  },
-  file_write: {
-    name: 'input.toolNames.fileWrite.name',
-    description: 'input.toolNames.fileWrite.description',
-  },
-  shell: {
-    name: 'input.toolNames.shell.name',
-    description: 'input.toolNames.shell.description',
-  },
-  web_fetch: {
-    name: 'input.toolNames.webFetch.name',
-    description: 'input.toolNames.webFetch.description',
-  },
-  web_search: {
-    name: 'input.toolNames.webSearch.name',
-    description: 'input.toolNames.webSearch.description',
-  },
-  code_exec: {
-    name: 'input.toolNames.codeExec.name',
-    description: 'input.toolNames.codeExec.description',
-  },
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {
@@ -198,6 +168,7 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
   const {
     currentConversationId,
     isStreaming,
+    toolsLocked,
     createConversation,
     sendMessage,
     stopGeneration,
@@ -214,13 +185,21 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
     return {
       currentConversationId: state.currentConversationId,
       isStreaming: sessionStatus === 'loading' || sessionStatus === 'waiting-unread',
+      toolsLocked: !!resolvedSessionId && (
+        state.sessionToolLocks[resolvedSessionId] === true
+        || (state.messages[resolvedSessionId]?.length ?? 0) > 0
+        || sessionStatus === 'loading' || sessionStatus === 'waiting-unread'
+      ),
       createConversation: state.createConversation,
       sendMessage: state.sendMessage,
       stopGeneration: state.stopGeneration,
       setCurrentConversation: state.setCurrentConversation,
     }
   }))
-  const [tools, setTools] = useState<ChatToolOption[]>([])
+  const [toolOptions, setToolOptions] = useState<ChatToolOption[]>([])
+  const [draftToolIds, setDraftToolIds] = useState<string[] | null>(null)
+  const [toolsSaving, setToolsSaving] = useState(false)
+  const [toolError, setToolError] = useState('')
   const [providerModels, setProviderModels] = useState<ProviderModel[]>([])
   const [selectedModelId, setSelectedModelId] = useState<number | null>(null)
   const [toolsOpen, setToolsOpen] = useState(false)
@@ -232,6 +211,10 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
   attachmentsRef.current = attachments
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const targetSessionId = sessionId ?? currentConversationId
+  const defaultToolIds = useAppStore(state => state.enabledToolIds)
+  const sessionToolIds = useChatStore(state => targetSessionId ? state.sessionToolIds[targetSessionId] : undefined)
+  const selectedToolIds = targetSessionId ? (sessionToolIds ?? []) : (draftToolIds ?? defaultToolIds)
+  const tools = toolOptions.map(tool => ({ ...tool, enabled: selectedToolIds.includes(tool.id) }))
 
   const enabledToolsCount = tools.filter(x => x.enabled).length
 
@@ -357,35 +340,41 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    let cancelled = false
     const loadTools = async () => {
       try {
-        const result = await PluginBinding.ListAvailableTools({})
+        const [result] = await Promise.all([
+          PluginBinding.ListAvailableTools({}),
+          loadToolDefaults(),
+          targetSessionId ? useChatStore.getState().loadSessionTools(targetSessionId) : Promise.resolve(),
+        ])
+        if (cancelled) return
         if (!result?.tools) return
-        const selectableTools = result.tools.filter(tool => tool.category !== 'builtin')
-        const persistedIds = useAppStore.getState().enabledToolIds
-        setTools(selectableTools.map((tool) => ({
+        setToolOptions(result.tools.map((tool) => ({
           id: tool.id,
           name: tool.name,
           description: tool.description,
           category: tool.category,
-          enabled: persistedIds.includes(tool.id),
+          enabled: false,
         })))
+        setToolError('')
       } catch {
-        // ignore
+        if (!cancelled) setToolError(t('settingsPage.general.tools.loadError'))
       }
     }
 
     void loadTools()
     const handleFocus = () => { void loadTools() }
     window.addEventListener('focus', handleFocus)
-    return () => window.removeEventListener('focus', handleFocus)
-  }, [])
+    return () => { cancelled = true; window.removeEventListener('focus', handleFocus) }
+  }, [targetSessionId, t])
 
   useEffect(() => {
     if (!editor) return
     editor.commands.clearContent()
     setIsEmpty(true)
     setAttachments([])
+    setDraftToolIds(null)
   }, [targetSessionId, editor])
 
   useEffect(() => {
@@ -424,7 +413,7 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
   }
 
   const handleSend = async () => {
-    if (!editor || isStreaming) return
+    if (!editor || isStreaming || toolsSaving) return
     const content = ((editor.storage as { markdown?: { getMarkdown?: () => string } }).markdown?.getMarkdown?.() ?? '').trim()
     if (!content && attachments.length === 0) return
 
@@ -440,6 +429,18 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
       setCurrentConversation(nextSessionId)
     }
 
+    let enabledUserTools: string[]
+    try {
+      if (draftToolIds !== null && !targetSessionId) {
+        await useChatStore.getState().saveSessionTools(nextSessionId, draftToolIds)
+      }
+      enabledUserTools = useChatStore.getState().sessionToolIds[nextSessionId]
+        ?? await useChatStore.getState().loadSessionTools(nextSessionId)
+    } catch {
+      setToolError(t('settingsPage.general.tools.loadError'))
+      return
+    }
+
     const outboundAttachments = attachments
     editor.commands.clearContent()
     setIsEmpty(true)
@@ -452,7 +453,7 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
       apiKey: selectedProvider.provider.api_key,
       modelName: selectedModel.model,
       providerType: selectedProvider.provider.provider_type,
-      enabledUserTools: tools.filter(tool => tool.enabled).map(tool => tool.id),
+      enabledUserTools,
       attachments: outboundAttachments,
     })
   }
@@ -543,13 +544,17 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
     setModelQuery('')
   }
 
-  const toggleTool = (id: string) => {
-    setTools((prev) => {
-      const next = prev.map(tl => tl.id === id ? { ...tl, enabled: !tl.enabled } : tl)
-      const enabledIds = next.filter(t => t.enabled).map(t => t.id)
-      useAppStore.getState().setEnabledToolIds(enabledIds)
-      return next
-    })
+  const toggleTool = async (id: string) => {
+    if (toolsSaving || toolsLocked) return
+    const next = selectedToolIds.includes(id) ? selectedToolIds.filter(value => value !== id) : [...selectedToolIds, id]
+    if (!targetSessionId) { setDraftToolIds(next); return }
+    setToolsSaving(true)
+    try {
+      await useChatStore.getState().saveSessionTools(targetSessionId, next)
+      setToolError('')
+    } catch {
+      setToolError(t('settingsPage.general.tools.saveError'))
+    } finally { setToolsSaving(false) }
   }
 
   const groupedTools = tools.reduce<Record<string, ChatToolOption[]>>((acc, tool) => {
@@ -614,6 +619,7 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
           onRemove={(idx) => setAttachments(prev => prev.filter((_, i) => i !== idx))}
         />
         <EditorContent editor={editor} />
+        {toolError && <p role="alert" className="px-4 pb-2 text-xs text-destructive">{toolError}</p>}
 
         {/* Toolbar */}
         <div className="flex items-center gap-1 px-2 pb-2">
@@ -630,6 +636,7 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
           {/* Tools */}
           <div className="relative">
             <button
+              title={toolsLocked ? t('settingsPage.general.tools.locked') : undefined}
               onClick={() => { setToolsOpen(v => !v); setModelOpen(false) }}
               className={cn(
                 'flex items-center gap-1 px-2 py-1 rounded-lg text-xs transition-colors',
@@ -650,6 +657,7 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
                 <div className="fixed inset-0 z-10" onClick={() => setToolsOpen(false)} />
                 <div className="absolute bottom-full left-0 mb-1 z-20 w-64 rounded-xl border border-border bg-popover shadow-lg">
                   <div className="max-h-72 overflow-y-auto py-1">
+                    {toolsLocked && <p className="px-3 py-2 text-xs text-muted-foreground">{t('settingsPage.general.tools.locked')}</p>}
                     {Object.entries(groupedTools).map(([category, categoryTools]) => (
                       <div key={category}>
                         <div className="px-3 py-1.5 text-[11px] font-semibold uppercase text-muted-foreground bg-muted/50">
@@ -658,7 +666,9 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
                         {categoryTools.map(tool => (
                           <button
                             key={tool.id}
-                            onClick={() => toggleTool(tool.id)}
+                            disabled={toolsLocked || toolsSaving || (!!targetSessionId && sessionToolIds === undefined)}
+                            aria-pressed={tool.enabled}
+                            onClick={() => { void toggleTool(tool.id) }}
                             className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
                           >
                             <div className={cn(
@@ -771,7 +781,7 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
             onClick={() => {
               void (isStreaming ? Promise.resolve(handleStop()) : handleSend())
             }}
-            disabled={!isStreaming && isEmpty && attachments.length === 0}
+            disabled={!isStreaming && (toolsSaving || (isEmpty && attachments.length === 0))}
             className={cn(
               'p-1.5 rounded-lg transition-colors',
               isStreaming

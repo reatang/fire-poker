@@ -3,6 +3,7 @@ import type { StateCreator } from 'zustand'
 import type { FontSize, Language } from '@/types'
 import type { ExtensionItem, GeneralSettingsTab, ProviderItem, SettingsBootstrap, SettingsOption, SettingsPrimaryTab, ShortcutValidationStatus } from '@/types/settings'
 import type { SkillItem } from '@/types/skills'
+import { SYSTEM_TOOLS_ID } from '@/types/settings'
 
 type DisplayDraft = {
   fontSize: FontSize
@@ -193,11 +194,11 @@ const createSettingsState: StateCreator<SettingsState> = (set) => ({
     setExtensions: (extensions) => set((state) => {
       // Keep the user's current selection across refreshes (window focus, mutations).
       // Only fall back to the first extension when the previous selection is gone or unset.
-      const stillExists = state.selectedExtensionId !== null
-        && extensions.some((item) => item.id === state.selectedExtensionId)
+      const stillExists = state.selectedExtensionId === SYSTEM_TOOLS_ID || (state.selectedExtensionId !== null
+        && extensions.some((item) => item.id === state.selectedExtensionId))
       return {
         extensions,
-        selectedExtensionId: stillExists ? state.selectedExtensionId : (extensions[0]?.id ?? null),
+        selectedExtensionId: stillExists ? state.selectedExtensionId : (extensions[0]?.id ?? SYSTEM_TOOLS_ID),
       }
     }),
     updateProvider: (provider) => set((state) => ({
@@ -220,7 +221,7 @@ const createSettingsState: StateCreator<SettingsState> = (set) => ({
       return {
         extensions,
         selectedExtensionId: state.selectedExtensionId === id
-          ? (extensions[0]?.id ?? null)
+          ? (extensions[0]?.id ?? SYSTEM_TOOLS_ID)
           : state.selectedExtensionId,
       }
     }),

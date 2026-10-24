@@ -73,6 +73,10 @@ export default {
       reset: 'Reset',
     },
     plugins: {
+      systemTools: {
+        title: 'System tools',
+        description: 'View tools and choose the defaults for new conversations.',
+      },
       title: 'Plugins & Tools',
       emptyDescription: 'Select an imported MCP tool or plugin to inspect its details.',
       add: 'Add',
@@ -237,6 +241,14 @@ export default {
       xl: 'Huge',
     },
     general: {
+      tools: {
+        title: 'Default tools',
+        locked: 'Tools are locked after the conversation starts. Start a new conversation to change them.',
+        description: 'Choose tools enabled in new conversations. Each conversation saves its own selection; changing these defaults does not update existing conversations.',
+        loadError: 'Could not load tool settings. Please try again.',
+        saveError: 'Could not save tool settings. Please try again.',
+        empty: 'No tools are currently available.',
+      },
       display: {
         title: 'Display settings',
         description: 'Adjust the application reading size and preview the change before applying it.',
@@ -446,6 +458,18 @@ export default {
       fileWrite: {
         name: 'Write File',
         description: 'Write content to a file at the given path',
+      },
+      windowsShell: {
+        name: 'Windows PowerShell',
+        description: 'Run Windows commands; prefer PowerShell 7, then Windows PowerShell',
+      },
+      macosShell: {
+        name: 'macOS Shell',
+        description: 'Run macOS commands using zsh, then bash or sh',
+      },
+      linuxShell: {
+        name: 'Linux Shell',
+        description: 'Run Linux commands using bash, then sh',
       },
       shell: {
         name: 'Run Command',

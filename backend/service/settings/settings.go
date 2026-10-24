@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/reatang/fire-poker/backend/models/view_model"
+	"github.com/reatang/fire-poker/backend/pkg/agent/toolkit"
+	"github.com/reatang/fire-poker/backend/pkg/agent/tools"
 	"github.com/reatang/fire-poker/backend/pkg/dir"
 	"github.com/reatang/fire-poker/backend/pkg/global_hotkey"
 	"github.com/reatang/fire-poker/backend/pkg/ierror"
@@ -23,17 +25,24 @@ type QuickChatShortcutController interface {
 
 // Dependencies contains optional runtime integrations for Settings.
 type Dependencies struct {
-	QuickChatShortcuts QuickChatShortcutController
+	QuickChatShortcuts  QuickChatShortcutController
+	SessionToolDefaults SessionToolDefaultsInitializer
+}
+
+// SessionToolDefaultsInitializer freezes legacy sessions before global defaults change.
+type SessionToolDefaultsInitializer interface {
+	InitializeSessionToolDefaults([]string) error
 }
 
 // Settings manages config persistence and file-system level settings actions.
 type Settings struct {
-	quickChatShortcuts QuickChatShortcutController
+	quickChatShortcuts  QuickChatShortcutController
+	sessionToolDefaults SessionToolDefaultsInitializer
 }
 
 // NewSettings creates a Settings service with optional runtime dependencies.
 func NewSettings(deps Dependencies) *Settings {
-	return &Settings{quickChatShortcuts: deps.QuickChatShortcuts}
+	return &Settings{quickChatShortcuts: deps.QuickChatShortcuts, sessionToolDefaults: deps.SessionToolDefaults}
 }
 
 // LoadQuickChatShortcutForStartup reads the persisted quick chat shortcut for app startup.
@@ -52,6 +61,10 @@ func (s *Settings) LoadBootstrap(ctx context.Context, input settings_dto.LoadBoo
 		return nil, ierror.Error(ierror.ErrSettingsLoadConfig, err)
 	}
 
+	if config.DefaultToolIDs == nil {
+		config.DefaultToolIDs = tools.DefaultToolIDs()
+	}
+	config.DefaultToolIDs = toolkit.NormalizeToolIDs(config.DefaultToolIDs)
 	return &settings_dto.LoadBootstrapOutput{
 		Bootstrap: view_model.SettingsBootstrap{
 			Locale:            config.Locale,
@@ -62,6 +75,7 @@ func (s *Settings) LoadBootstrap(ctx context.Context, input settings_dto.LoadBoo
 			QuickChatShortcut: config.QuickChatShortcut,
 			DefaultProviderID: config.DefaultProviderID,
 			Version:           version.ApplicationVersion,
+			DefaultToolIDs:    config.DefaultToolIDs,
 		},
 	}, nil
 }
@@ -103,7 +117,7 @@ func (s *Settings) SaveShortcutSettings(ctx context.Context, input settings_dto.
 	}
 
 	config.QuickChatShortcut = result.Shortcut
-	if err := s.saveConfigToDir(config.DataDir, config); err != nil {
+	if err := s.saveConfigToDir(config.DataDir, config, "quick_chat_shortcut"); err != nil {
 		if s.quickChatShortcuts != nil {
 			_ = s.quickChatShortcuts.UpdateShortcut(ctx, previousShortcut)
 		}
@@ -161,7 +175,7 @@ func (s *Settings) SaveLocaleSettings(ctx context.Context, input settings_dto.Sa
 	config.Locale = input.Locale
 	config.Language = input.Language
 
-	err = s.saveConfigToDir(config.DataDir, config)
+	err = s.saveConfigToDir(config.DataDir, config, "locale", "language")
 	if err != nil {
 		return nil, ierror.Error(ierror.ErrSettingsSaveConfig, err)
 	}
@@ -178,7 +192,7 @@ func (s *Settings) SaveDisplaySettings(ctx context.Context, input settings_dto.S
 
 	config.FontSize = input.FontSize
 
-	err = s.saveConfigToDir(config.DataDir, config)
+	err = s.saveConfigToDir(config.DataDir, config, "font_size")
 	if err != nil {
 		return nil, ierror.Error(ierror.ErrSettingsSaveConfig, err)
 	}

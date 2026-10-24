@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reatang/fire-poker/backend/pkg/agent/toolkit"
 	"github.com/reatang/fire-poker/backend/pkg/agent/tools"
 	pkgProvider "github.com/reatang/fire-poker/backend/pkg/provider"
 )
@@ -155,7 +156,7 @@ func heuristicToolConfirmDecision(input ToolConfirmDecisionInput) ToolConfirmDec
 
 // deterministicToolConfirmDecision applies product safety rules that do not need model judgment.
 func deterministicToolConfirmDecision(input ToolConfirmDecisionInput) (ToolConfirmDecision, bool) {
-	if input.ToolName != "shell" {
+	if !toolkit.IsShellTool(input.ToolName) {
 		return ToolConfirmDecision{}, false
 	}
 	command := shellCommandFromArgs(input.Arguments)

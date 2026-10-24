@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
+	"github.com/reatang/fire-poker/backend/pkg/configfile"
 	"github.com/reatang/fire-poker/backend/pkg/dir"
 )
 
@@ -17,7 +18,7 @@ func (s *Skills) loadConfig() (*data_models.Config, error) {
 		return nil, err
 	}
 	configPath := filepath.Join(dataDir, dir.ConfigFileName)
-	bytes, err := os.ReadFile(configPath)
+	bytes, err := configfile.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &data_models.Config{DataDir: dataDir}, nil
@@ -28,22 +29,13 @@ func (s *Skills) loadConfig() (*data_models.Config, error) {
 	if err := json.Unmarshal(bytes, cfg); err != nil {
 		return nil, err
 	}
-	if cfg.DataDir == "" {
-		cfg.DataDir = dataDir
-	}
+	cfg.DataDir = dataDir
 	return cfg, nil
 }
 
 // saveConfig writes the app config to config.json in the data directory.
 func (s *Skills) saveConfig(cfg *data_models.Config) error {
-	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
-		return err
-	}
-	content, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(filepath.Join(cfg.DataDir, dir.ConfigFileName), content, 0o644)
+	return configfile.SaveFields(cfg.DataDir, cfg, "disabled_skills")
 }
 
 // renameDisabledSkill rewrites a disabled skill entry when a user skill is renamed.

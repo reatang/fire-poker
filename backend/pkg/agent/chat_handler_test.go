@@ -115,7 +115,7 @@ func TestSendMessageContinuesAfterRequestContextIsCanceled(t *testing.T) {
 	}
 
 	r := newDelayedRunner()
-	manager.runners["https://api.example.com/gpt-test"] = r
+	injectSessionRunner(t, manager, session.ID, "https://api.example.com", "gpt-test", "openai_compatibility", r)
 
 	requestCtx, cancelRequest := context.WithCancel(context.Background())
 	if err := handler.SendMessage(requestCtx, SendMessageParams{
@@ -198,7 +198,7 @@ func TestSendMessageReplaysStoredSessionHistoryWhenSwitchingRunner(t *testing.T)
 	}
 
 	r := newDelayedRunner()
-	manager.runners["https://api.example.com/new-model"] = r
+	injectSessionRunner(t, manager, session.ID, "https://api.example.com", "new-model", "openai_compatibility", r)
 
 	if err := handler.SendMessage(context.Background(), SendMessageParams{
 		SessionID:    session.ID,
@@ -516,7 +516,7 @@ func TestSendMessagePersistsAttachmentsAndBuildsMultimodal(t *testing.T) {
 	r := newDelayedRunner()
 	// Inject runner directly — bypasses the real GetOrCreateRunner.
 	// Key format matches manager.GetOrCreateRunner's cache key.
-	manager.runners["https://api.example.com/m"] = r
+	injectSessionRunner(t, manager, session.ID, "https://api.example.com", "m", "openai_compatibility", r)
 
 	tmpDir := t.TempDir()
 	imgPath := filepath.Join(tmpDir, "tiny.png")

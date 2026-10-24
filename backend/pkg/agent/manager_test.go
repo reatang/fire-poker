@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +17,23 @@ import (
 	"github.com/reatang/fire-poker/backend/storage"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"trpc.group/trpc-go/trpc-agent-go/runner"
 )
+
+// injectSessionRunner registers a fake using the actual session-scoped cache identity.
+func injectSessionRunner(t *testing.T, manager *Manager, sessionID uint, baseURL, modelName string, providerType pkgProvider.Type, fake runner.Runner) {
+	t.Helper()
+	ids, err := manager.SessionToolIDs(sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := manager.Storage().GetSession(sessionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := fmt.Sprintf("%s|session:%d|catalog:%d|services:%d", runnerCacheKey(baseURL, modelName, providerType, ids, session.Kind), sessionID, manager.toolRegistry.Version(), manager.toolDependenciesVersion)
+	manager.runners[key] = fake
+}
 
 type fakeCliInstallProgressReporter struct{}
 
@@ -74,7 +91,7 @@ func TestNewManagerRegistersPromptAndBuiltInTools(t *testing.T) {
 	prompt.Register(prompt_id.MainAgent, "")
 	prompt.Register(prompt_id.GenChatTitle, "")
 
-	manager := NewManager(newTestStorage(t))
+	manager := NewManager(nil)
 
 	loadedPrompt, err := prompt.Load(prompt_id.MainAgent)
 	if err != nil {
@@ -111,18 +128,24 @@ func TestNewManagerRegistersPromptAndBuiltInTools(t *testing.T) {
 }
 
 func TestBuildAgentToolsIncludesBuiltinAndEnabledUserTools(t *testing.T) {
-	manager := NewManager(newTestStorage(t))
+	manager := NewManager(nil)
 
-	agentTools := manager.buildAgentTools([]string{"code_exec"}, "user", 1)
-	if len(agentTools) != 11 {
-		t.Fatalf("expected 11 tools (10 active builtin + 1 user), got %d", len(agentTools))
+	agentTools, err := manager.buildAgentTools([]string{"code_exec"}, "user", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(agentTools) != 1 || agentTools[0].Declaration().Name != "code_exec" {
+		t.Fatalf("expected only the selected code_exec tool, got %v", agentTools)
 	}
 }
 
 func TestBuildAgentToolsIncludesWebToolsByDefault(t *testing.T) {
-	manager := NewManager(newTestStorage(t))
+	manager := NewManager(nil)
 
-	agentTools := manager.buildAgentTools(nil, "user", 1)
+	agentTools, err := manager.buildAgentTools(nil, "user", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	names := make(map[string]bool, len(agentTools))
 	for _, current := range agentTools {
 		names[current.Declaration().Name] = true
@@ -136,10 +159,13 @@ func TestBuildAgentToolsIncludesWebToolsByDefault(t *testing.T) {
 }
 
 func TestBuildAgentToolsIncludesTaskStateToolsForTaskSessions(t *testing.T) {
-	manager := NewManager(newTestStorage(t))
+	manager := NewManager(nil)
 	manager.SetCliInstallProgressReporter(&fakeCliInstallProgressReporter{})
 
-	agentTools := manager.buildAgentTools(nil, "task", 1)
+	agentTools, err := manager.buildAgentTools(nil, "task", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	names := make(map[string]bool, len(agentTools))
 	for _, current := range agentTools {
 		names[current.Declaration().Name] = true
@@ -153,15 +179,18 @@ func TestBuildAgentToolsIncludesTaskStateToolsForTaskSessions(t *testing.T) {
 }
 
 func TestBuildAgentToolsIncludesOrdinaryUserTools(t *testing.T) {
-	manager := NewManager(newTestStorage(t))
+	manager := NewManager(nil)
 
-	agentTools := manager.buildAgentTools([]string{"web_search"}, "user", 1)
+	agentTools, err := manager.buildAgentTools([]string{"web_search"}, "user", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	names := make(map[string]bool, len(agentTools))
 	for _, current := range agentTools {
 		names[current.Declaration().Name] = true
 	}
 
-	for _, want := range []string{tools.QuestionToolName, tools.TodoWriteToolName, tools.WebSearchToolName} {
+	for _, want := range []string{tools.WebSearchToolName} {
 		if !names[want] {
 			t.Fatalf("expected ordinary user tool %q to be available, got %v", want, names)
 		}
@@ -183,16 +212,19 @@ func TestBuildMCPToolSetsReturnsNoneWhenNoExtensionToolIsSelected(t *testing.T) 
 		},
 	})
 
-	manager := NewManager(newTestStorage(t))
+	manager := NewManager(nil)
 
-	toolSets := manager.buildMCPToolSets([]string{})
+	toolSets, err := manager.buildMCPToolSets([]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(toolSets) != 0 {
 		t.Fatalf("expected 0 mcp tool sets when no extension tool is selected, got %d", len(toolSets))
 	}
 }
 
 func TestGetOrCreateRunnerCachesRunnerByBaseURLAndModel(t *testing.T) {
-	manager := NewManager(newTestStorage(t))
+	manager := NewManager(nil)
 
 	first, err := manager.GetOrCreateRunner(
 		"https://api.example.com/v1",

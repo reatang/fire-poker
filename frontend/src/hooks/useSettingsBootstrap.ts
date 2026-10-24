@@ -71,7 +71,7 @@ export function useSettingsBootstrap() {
             ? mapWrapperToProviderItems(providersResult.providers)
             : []
           hydrate({
-            ...(payloadResult.bootstrap as SettingsBootstrap),
+            ...(payloadResult.bootstrap as Omit<SettingsBootstrap, 'providers'>),
             providers,
             languages: languagesResult?.languages ?? fallbackBootstrap.languages,
             regions: regionsResult?.regions ?? fallbackBootstrap.regions,

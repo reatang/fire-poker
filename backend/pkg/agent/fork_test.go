@@ -35,7 +35,7 @@ func TestForkContinuesWithEntireCopiedHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := newDelayedRunner()
-	m.runners["http://test/branch"] = r
+	injectSessionRunner(t, m, fork.ID, "http://test", "branch", "", r)
 	if err := NewChatHandler(m).SendMessage(context.Background(), SendMessageParams{SessionID: fork.ID, Content: "continue in branch", BaseURL: "http://test", ModelName: "branch"}); err != nil {
 		t.Fatal(err)
 	}

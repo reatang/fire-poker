@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+	"github.com/reatang/fire-poker/backend/pkg/agent/toolkit"
 )
 
 const defaultShellPTYWaitDelay = time.Second
@@ -35,7 +36,7 @@ func shellFuncPTY(ctx context.Context, emitter ShellProgressEmitter, sessionID u
 			text := string(buf[:n])
 			stdout.WriteString(text)
 			if emitter != nil && sessionID != 0 {
-				emitter.EmitToolResult(sessionID, "shell", stdout.String())
+				emitter.EmitToolResult(sessionID, toolkit.PlatformShellToolID(), stdout.String())
 			}
 		}
 		if readErr != nil {

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -126,11 +127,17 @@ func (a *Agent) CreateSession(ctx context.Context, input agent_dto.CreateSession
 		kind = "task"
 	}
 
+	ids, err := a.manager.DefaultToolIDs()
+	if err != nil {
+		return nil, ierror.Error(ierror.ErrAgentCreateSession, err)
+	}
+	toolData, _ := json.Marshal(ids)
 	session, err := a.manager.Storage().CreateSession(data_models.Session{
-		Title:  title,
-		Status: "idle",
-		Kind:   kind,
-		Tags:   marshalSessionTags(tags),
+		ToolIDs: string(toolData),
+		Title:   title,
+		Status:  "idle",
+		Kind:    kind,
+		Tags:    marshalSessionTags(tags),
 	})
 	if err != nil {
 		return nil, ierror.Error(ierror.ErrAgentCreateSession, err)
@@ -183,11 +190,17 @@ func (a *Agent) SpawnTaskSession(ctx context.Context, input agent_dto.SpawnTaskS
 		title = "Task"
 	}
 
+	ids, err := a.manager.DefaultToolIDs()
+	if err != nil {
+		return nil, ierror.Error(ierror.ErrAgentCreateSession, err)
+	}
+	toolData, _ := json.Marshal(ids)
 	session, err := a.manager.Storage().CreateSession(data_models.Session{
-		Title:  title,
-		Status: "idle",
-		Kind:   "task",
-		Tags:   marshalSessionTags([]string{"task"}),
+		ToolIDs: string(toolData),
+		Title:   title,
+		Status:  "idle",
+		Kind:    "task",
+		Tags:    marshalSessionTags([]string{"task"}),
 	})
 	if err != nil {
 		return nil, ierror.Error(ierror.ErrAgentCreateSession, err)

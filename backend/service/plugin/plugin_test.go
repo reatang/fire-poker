@@ -7,8 +7,40 @@ import (
 	"testing"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
+	agenttools "github.com/reatang/fire-poker/backend/pkg/agent/tools"
 	"github.com/reatang/fire-poker/backend/service/plugin/plugin_dto"
+	"github.com/reatang/fire-poker/backend/service/settings"
+	"github.com/reatang/fire-poker/backend/service/settings/settings_dto"
 )
+
+// TestDelayedPluginSavePreservesAppliedTools reproduces a plugin probe committing a stale config snapshot.
+func TestDelayedPluginSavePreservesAppliedTools(t *testing.T) {
+	t.Setenv("FIRE_POKER_DATA_DIR", t.TempDir())
+	ctx := context.Background()
+	s := settings.NewSettings(settings.Dependencies{})
+	if _, err := s.SaveToolSettings(ctx, settings_dto.SaveToolSettingsInput{DefaultToolIDs: []string{"shell"}}); err != nil {
+		t.Fatal(err)
+	}
+	p := NewPlugin()
+	stale, err := p.loadConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SaveToolSettings(ctx, settings_dto.SaveToolSettingsInput{DefaultToolIDs: []string{}}); err != nil {
+		t.Fatal(err)
+	}
+	stale.Extensions = []data_models.ExtensionItem{{ID: "mcp:test", RuntimeStatus: "ready"}}
+	if err := p.saveConfig(stale); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := s.LoadBootstrap(ctx, settings_dto.LoadBootstrapInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.Bootstrap.DefaultToolIDs == nil || len(loaded.Bootstrap.DefaultToolIDs) != 0 {
+		t.Fatal("plugin refresh restored unchecked tools")
+	}
+}
 
 func writeTestMCPBundleDir(t *testing.T) string {
 	t.Helper()
@@ -166,7 +198,7 @@ func TestListAvailableToolsOnlyShowsPracticalBuiltinsForOrdinaryUsers(t *testing
 		got[item.ID] = true
 	}
 
-	for _, want := range []string{"shell", "question", "web_fetch", "web_search", "Skill", "todo_write"} {
+	for _, want := range []string{agenttools.ShellMeta().Name, "question", "web_fetch", "web_search", "Skill", "todo_write"} {
 		if !got[want] {
 			t.Fatalf("expected practical builtin %q to be visible, got %v", want, got)
 		}

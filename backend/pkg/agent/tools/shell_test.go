@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
+	"github.com/reatang/fire-poker/backend/pkg/agent/toolkit"
 	"runtime"
 	"strings"
 	"testing"
@@ -27,8 +28,7 @@ func TestShellFuncStreamsProgressAndReturnsCombinedOutput(t *testing.T) {
 	command := `printf 'hello'; sleep 0.1; printf ' world'; printf ' warn' >&2`
 	wantStdout, wantStderr := "hello world", " warn"
 	if runtime.GOOS == "windows" {
-		command = `echo hello world&echo warn 1>&2`
-		wantStdout, wantStderr = "hello world\r\n", "warn \r\n"
+		command = `[Console]::Out.Write('hello world'); [Console]::Error.Write(' warn')`
 	}
 	out, err := shellFunc(context.Background(), emitter, 9, shellInput{
 		Command: command,
@@ -42,7 +42,7 @@ func TestShellFuncStreamsProgressAndReturnsCombinedOutput(t *testing.T) {
 	if out.Stderr != wantStderr {
 		t.Fatalf("unexpected stderr: %q", out.Stderr)
 	}
-	if emitter.sessionID != 9 || emitter.toolName != "shell" {
+	if emitter.sessionID != 9 || emitter.toolName != toolkit.PlatformShellToolID() {
 		t.Fatalf("unexpected emitter target: session=%d tool=%q", emitter.sessionID, emitter.toolName)
 	}
 	if len(emitter.results) == 0 {
@@ -58,7 +58,7 @@ func TestShellFuncPTYStreamsTerminalOutput(t *testing.T) {
 	emitter := &fakeShellProgressEmitter{}
 	command := `printf 'qr'; sleep 0.1; printf ' ready'`
 	if runtime.GOOS == "windows" {
-		command = `echo qr ready`
+		command = `[Console]::Out.Write('qr ready')`
 	}
 	out, err := shellFunc(context.Background(), emitter, 10, shellInput{
 		Command: command,
@@ -122,8 +122,6 @@ func (f *fakeTerminalRunner) SetTerminalVisible(ctx context.Context, terminalID 
 
 // TestShellFuncUsesTerminalRunnerWhenAvailable verifies shell uses the shared backend.
 func TestShellFuncUsesTerminalRunnerWhenAvailable(t *testing.T) {
-	t.Setenv("SHELL", "/custom/shell")
-	t.Setenv("ComSpec", "custom-shell.exe")
 	runner := &fakeTerminalRunner{
 		chunks: []terminalOutputChunk{{Data: "hello from terminal"}},
 	}
@@ -137,10 +135,7 @@ func TestShellFuncUsesTerminalRunnerWhenAvailable(t *testing.T) {
 	if out.TerminalID != "term_shell" {
 		t.Fatalf("terminal id=%q", out.TerminalID)
 	}
-	wantShell, wantArgs := "/custom/shell", []string{"-lc", "printf hello"}
-	if runtime.GOOS == "windows" {
-		wantShell, wantArgs = "custom-shell.exe", []string{"/d", "/s", "/c", "printf hello"}
-	}
+	wantShell, wantArgs := resolveShellCommand("printf hello")
 	if runner.createParams.Command != wantShell || strings.Join(runner.createParams.Args, "|") != strings.Join(wantArgs, "|") {
 		t.Fatalf("unexpected create params: %+v", runner.createParams)
 	}
@@ -152,8 +147,12 @@ func TestShellFuncUsesTerminalRunnerWhenAvailable(t *testing.T) {
 // TestShellFuncFallsBackFromMissingWorkDir verifies model-supplied container paths do not break host commands.
 func TestShellFuncFallsBackFromMissingWorkDir(t *testing.T) {
 	missingDir := t.TempDir() + "/missing"
+	command := "printf ok"
+	if runtime.GOOS == "windows" {
+		command = `[Console]::Out.Write('ok')`
+	}
 	out, err := shellFunc(context.Background(), nil, 0, shellInput{
-		Command: "printf ok",
+		Command: command,
 		WorkDir: missingDir,
 	})
 	if err != nil {

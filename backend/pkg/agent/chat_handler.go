@@ -237,6 +237,10 @@ func (ch *ChatHandler) SendMessage(ctx context.Context, params SendMessageParams
 	if err != nil {
 		return fmt.Errorf("get session: %w", err)
 	}
+	params.EnabledUserTools, err = ch.manager.ToolsForTurn(params.SessionID, params.EnabledUserTools)
+	if err != nil {
+		return fmt.Errorf("resolve session tools: %w", err)
+	}
 	if requested := strings.TrimSpace(params.SystemPrompt); requested != "" {
 		effective := session.SystemPrompt
 		if strings.TrimSpace(effective) == "" {

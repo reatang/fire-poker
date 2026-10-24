@@ -2,11 +2,11 @@ package provider
 
 import (
 	"encoding/json"
-	"os"
 	"path/filepath"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	"github.com/reatang/fire-poker/backend/models/view_model"
+	"github.com/reatang/fire-poker/backend/pkg/configfile"
 	"github.com/reatang/fire-poker/backend/pkg/dir"
 	"github.com/reatang/fire-poker/backend/pkg/ierror"
 	pkgProvider "github.com/reatang/fire-poker/backend/pkg/provider"
@@ -62,7 +62,7 @@ func readDefaultProviderID() uint {
 	if err != nil {
 		return 0
 	}
-	bytes, err := os.ReadFile(filepath.Join(dataDir, dir.ConfigFileName))
+	bytes, err := configfile.ReadFile(filepath.Join(dataDir, dir.ConfigFileName))
 	if err != nil {
 		return 0
 	}
@@ -79,17 +79,5 @@ func writeDefaultProviderID(providerID uint) error {
 	if err != nil {
 		return ierror.Error(ierror.ErrProviderSetDefault, err)
 	}
-	configPath := filepath.Join(dataDir, dir.ConfigFileName)
-
-	var cfg data_models.Config
-	if raw, readErr := os.ReadFile(configPath); readErr == nil {
-		_ = json.Unmarshal(raw, &cfg)
-	}
-	cfg.DefaultProviderID = providerID
-
-	content, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return ierror.Error(ierror.ErrProviderSetDefault, err)
-	}
-	return ierror.Error(ierror.ErrProviderSetDefault, os.WriteFile(configPath, content, 0o644))
+	return ierror.Error(ierror.ErrProviderSetDefault, configfile.SaveFields(dataDir, &data_models.Config{DefaultProviderID: providerID}, "default_provider_id"))
 }

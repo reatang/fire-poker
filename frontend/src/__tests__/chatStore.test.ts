@@ -19,6 +19,8 @@ vi.mock('@wailsio/runtime', () => ({
 
 vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/agent', () => ({
   Agent: {
+    GetSessionToolSettings: vi.fn().mockResolvedValue({ tool_ids: [] }),
+    SaveSessionToolSettings: vi.fn(async (input: {tool_ids: string[]}) => ({ tool_ids: input.tool_ids })),
     CreateSession: vi.fn().mockResolvedValue({ session_id: 1, title: 'New Chat' }),
     ForkSession: vi.fn(),
     DeleteSession: vi.fn().mockResolvedValue(undefined),

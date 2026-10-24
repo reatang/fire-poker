@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	agenttools "github.com/reatang/fire-poker/backend/pkg/agent/tools"
 	pkgcli "github.com/reatang/fire-poker/backend/pkg/cli"
+	"github.com/reatang/fire-poker/backend/pkg/configfile"
 	"github.com/reatang/fire-poker/backend/pkg/dir"
 	"github.com/reatang/fire-poker/backend/pkg/ierror"
 	pkgmcp "github.com/reatang/fire-poker/backend/pkg/mcp"
@@ -19,6 +19,7 @@ import (
 	pkgRuntimeState "github.com/reatang/fire-poker/backend/pkg/runtime_state"
 	"github.com/reatang/fire-poker/backend/service/plugin/plugin_dto"
 	"github.com/reatang/fire-poker/backend/storage"
+	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 // Plugin manages imported MCP tools and future plugin entries.
@@ -120,7 +121,7 @@ func readDefaultProviderIDLocal() uint {
 	if err != nil {
 		return 0
 	}
-	bytes, err := os.ReadFile(filepath.Join(dataDir, dir.ConfigFileName))
+	bytes, err := configfile.ReadFile(filepath.Join(dataDir, dir.ConfigFileName))
 	if err != nil {
 		return 0
 	}
@@ -353,18 +354,7 @@ func (p *Plugin) ListAvailableTools(ctx context.Context, input plugin_dto.ListAv
 	return &plugin_dto.ListAvailableToolsOutput{Tools: result}, nil
 }
 
+// builtinToolMetas shares the runtime catalog instead of maintaining a second tool list.
 func builtinToolMetas() []agenttools.ToolMeta {
-	return []agenttools.ToolMeta{
-		agenttools.DateTimeMeta(),
-		agenttools.ShellMeta(),
-		agenttools.BuildQuestionTool(),
-		agenttools.WebFetchMeta(),
-		agenttools.BuildWebSearchTool(),
-		agenttools.BuildTodoWriteTool(),
-		{
-			Name:        agenttools.SkillToolName,
-			Description: "Load a task template or workflow instruction for repeatable user tasks",
-			Category:    agenttools.CategoryBuiltin,
-		},
-	}
+	return agenttools.ListedToolMetas()
 }

@@ -219,6 +219,62 @@ export class SaveShortcutSettingsOutput {
     }
 }
 
+/**
+ * SaveToolSettingsInput changes defaults for future sessions only.
+ */
+export class SaveToolSettingsInput {
+    "default_tool_ids": string[];
+
+    /** Creates a new SaveToolSettingsInput instance. */
+    constructor($$source: Partial<SaveToolSettingsInput> = {}) {
+        if (!("default_tool_ids" in $$source)) {
+            this["default_tool_ids"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SaveToolSettingsInput instance from a string or object.
+     */
+    static createFrom($$source: any = {}): SaveToolSettingsInput {
+        const $$createField0_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("default_tool_ids" in $$parsedSource) {
+            $$parsedSource["default_tool_ids"] = $$createField0_0($$parsedSource["default_tool_ids"]);
+        }
+        return new SaveToolSettingsInput($$parsedSource as Partial<SaveToolSettingsInput>);
+    }
+}
+
+/**
+ * SaveToolSettingsOutput returns the normalized persisted defaults.
+ */
+export class SaveToolSettingsOutput {
+    "default_tool_ids": string[];
+
+    /** Creates a new SaveToolSettingsOutput instance. */
+    constructor($$source: Partial<SaveToolSettingsOutput> = {}) {
+        if (!("default_tool_ids" in $$source)) {
+            this["default_tool_ids"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new SaveToolSettingsOutput instance from a string or object.
+     */
+    static createFrom($$source: any = {}): SaveToolSettingsOutput {
+        const $$createField0_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("default_tool_ids" in $$parsedSource) {
+            $$parsedSource["default_tool_ids"] = $$createField0_0($$parsedSource["default_tool_ids"]);
+        }
+        return new SaveToolSettingsOutput($$parsedSource as Partial<SaveToolSettingsOutput>);
+    }
+}
+
 export class ValidateShortcutSettingsInput {
     "quick_chat_shortcut": string;
 
@@ -271,3 +327,4 @@ export class ValidateShortcutSettingsOutput {
 
 // Private type creation functions
 const $$createType0 = view_model$0.SettingsBootstrap.createFrom;
+const $$createType1 = $Create.Array($Create.Any);

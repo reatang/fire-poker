@@ -12,6 +12,7 @@ import { CliInstallModal } from '@/components/settings/plugins/CliInstallModal'
 import { CliLoginDialog } from '@/components/settings/plugins/CliLoginDialog'
 import { PluginToolDetailView } from '@/components/settings/plugins/PluginToolDetailView'
 import { PluginToolList } from '@/components/settings/plugins/PluginToolList'
+import { ToolSettingsView } from '@/components/settings/plugins/ToolSettingsView'
 import { ProviderDetailView } from '@/components/settings/providers/ProviderDetailView'
 import { ProviderList } from '@/components/settings/providers/ProviderList'
 import { SkillsList } from '@/components/settings/skills/SkillsList'
@@ -34,6 +35,7 @@ import { SelectFolderInput } from '@bindings/github.com/reatang/fire-poker/backe
 import type { ProviderWrapper } from '@bindings/github.com/reatang/fire-poker/backend/service/provider/provider_dto/models'
 import type { ExtensionItem as BindingExtensionItem } from '@bindings/github.com/reatang/fire-poker/backend/models/data_models/models'
 import type { ExtensionItem, ProviderItem } from '@/types/settings'
+import { SYSTEM_TOOLS_ID } from '@/types/settings'
 
 type RuntimePhase = 'download' | 'extract' | 'verify'
 
@@ -323,7 +325,7 @@ export function SettingsApp() {
 
   useEffect(() => {
     const loadDetail = async () => {
-      if (!selectedExtensionId) {
+      if (!selectedExtensionId || selectedExtensionId === SYSTEM_TOOLS_ID) {
         setSelectedExtensionConfig('')
         return
       }
@@ -388,7 +390,8 @@ export function SettingsApp() {
       </SettingsSectionLayout>
     )
   } else if (activeTab === 'plugins') {
-    const selectedExtension = extensions.find((extension) => extension.id === selectedExtensionId) ?? extensions[0] ?? null
+    const systemToolsSelected = selectedExtensionId === SYSTEM_TOOLS_ID
+    const selectedExtension = systemToolsSelected ? null : (extensions.find((extension) => extension.id === selectedExtensionId) ?? extensions[0] ?? null)
 
     const handleNpmSubmit = async (npmPackage: string, name: string) => {
       try {
@@ -430,7 +433,7 @@ export function SettingsApp() {
             apiKey: defaultProvider?.api_key ?? '',
             modelName: defaultModel?.model ?? '',
             providerType: (defaultProvider?.provider_type ?? '') as any,
-            enabledUserTools: [],
+            enabledUserTools: await useChatStore.getState().loadSessionTools(sessionId),
             attachments: [],
           })
         }
@@ -577,7 +580,7 @@ export function SettingsApp() {
           sidebar={(
             <PluginToolList
               items={extensions}
-              selectedId={selectedExtension?.id ?? null}
+              selectedId={systemToolsSelected ? SYSTEM_TOOLS_ID : (selectedExtension?.id ?? null)}
               onSelect={setSelectedExtensionId}
               onCreate={handleCreateExtension}
               onToggleEnable={handleToggleExtension}
@@ -586,7 +589,7 @@ export function SettingsApp() {
             />
           )}
         >
-          <PluginToolDetailView
+          {systemToolsSelected ? <ToolSettingsView /> : <PluginToolDetailView
             extension={selectedExtension}
             configText={selectedExtensionConfig}
             loading={pluginLoading}
@@ -599,7 +602,7 @@ export function SettingsApp() {
             onSave={(configText) => { void handleSaveExtensionConfig(configText) }}
             onResetData={() => { void handleResetCliData() }}
             onRegenerateCliManifest={() => { void handleRegenerateCliManifest() }}
-          />
+          />}
         </SettingsSectionLayout>
         <CliInstallModal
           open={cliModalOpen}

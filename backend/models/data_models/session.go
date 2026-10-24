@@ -10,4 +10,5 @@ type Session struct {
 	Tags         string `gorm:"type:text" json:"tags"`
 	SystemPrompt string `gorm:"type:text" json:"system_prompt"`
 	PromptName   string `gorm:"type:varchar(255)" json:"prompt_name"`
+	ToolIDs      string `gorm:"type:text" json:"tool_ids"`
 }
