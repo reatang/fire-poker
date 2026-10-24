@@ -132,10 +132,11 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  draft-release:
+  release:
     if: startsWith(github.ref, 'refs/tags/')
     needs: package
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
@@ -150,9 +151,19 @@ jobs:
           find artifacts -type f ! -name SHA256SUMS.txt ! -name manifest.json -exec cp {} release/ \;
           cd release
           sha256sum * > SHA256SUMS.txt
-      - uses: softprops/action-gh-release@v2
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
+          name: Fire Poker ${{ github.ref_name }}
           draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
           fail_on_unmatched_files: true
           files: release/*
+      - name: Publish release after all assets are uploaded
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release edit "$RELEASE_TAG" --draft=false

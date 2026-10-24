@@ -63,8 +63,20 @@ uv run --locked tools/release.py plan --target darwin-arm64
 
 Pull Request 自动运行测试；手动运行 `Desktop packages` 构建并上传产物。
 推送版本标签时，先通过测试和
-标签一致性检查，再并行构建四个目标；全部成功后才汇总校验和并创建草稿 Release。
-正式发布由维护者检查草稿后执行。
+标签一致性检查，再并行构建四个目标；全部成功后汇总校验和并上传安装包，
+上传全部完成后自动发布 GitHub Release。上传期间暂存为草稿，避免发布缺少附件的版本。
+带连字符的版本（例如 `v0.4.0-beta.1`）自动标记为预发布版本。
+
+例如发布当前 `0.3.0` 版本：
+
+```text
+git tag -a v0.3.0 -m "发布 v0.3.0"
+git push origin v0.3.0
+```
+
+发布其他版本前，先更新 `build/release.json` 的 `version`，运行
+`uv run --locked tools/release.py sync` 并提交、推送，再创建对应的 `vVERSION` 标签。
+工作流使用仓库自带的 `GITHUB_TOKEN` 发布，无需额外配置个人访问令牌。
 
 macOS 分别使用原生 Intel 与 Apple Silicon runner，参见
 [GitHub runner 平台与架构说明](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)。
