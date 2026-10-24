@@ -23,10 +23,19 @@ import (
 func newTestStorage(t *testing.T) *storage.Storage {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	// Each helper call owns its database; background tasks from another test
+	// must not share tables or locks with this one.
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("get sqlite connection: %v", err)
+	}
+	// A private in-memory database belongs to one connection.
+	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = sqlDB.Close() })
 
 	stor, err := storage.NewStorageFromDB(db)
 	if err != nil {

@@ -2,5 +2,5 @@
 !define INFO_PROJECTNAME "fire-poker"
 !define INFO_COMPANYNAME "reatang"
 !define INFO_PRODUCTNAME "Fire Poker"
-!define INFO_PRODUCTVERSION "0.4.0"
+!define INFO_PRODUCTVERSION "0.4.1"
 !define INFO_COPYRIGHT ""

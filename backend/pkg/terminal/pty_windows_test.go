@@ -13,7 +13,9 @@ import (
 func TestWindowsConPTYInputResizeEnvironmentAndExitCode(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	params := processTestParams(`$line = [Console]::ReadLine(); [Console]::Out.WriteLine("got:$line"); [Console]::Out.WriteLine($env:LEMONTEA_TERMINAL_TEST); [Console]::Out.WriteLine((Get-Location).Path); exit 7`)
+	// ConPTY emits UTF-8, but the child shell still uses the machine's console
+	// code page. Select UTF-8 explicitly so non-ASCII output also works on CI.
+	params := processTestParams(`[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new(); $line = [Console]::ReadLine(); [Console]::Out.WriteLine("got:$line"); [Console]::Out.WriteLine($env:LEMONTEA_TERMINAL_TEST); [Console]::Out.WriteLine((Get-Location).Path); exit 7`)
 	params.Cwd = t.TempDir()
 	params.Env = append(os.Environ(), "LEMONTEA_TERMINAL_TEST=柠檬茶")
 	p, _, err := startPTYProcess(ctx, params)
