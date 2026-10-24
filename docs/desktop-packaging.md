@@ -61,7 +61,7 @@ uv run --locked tools/release.py plan --target darwin-arm64
 
 ## CI 与发布
 
-Pull Request 自动运行测试；手动运行 `Desktop packages` 构建并上传产物。
+Pull Request 仅自动运行测试检查，不执行安装包构建；仅推送 `v*` 版本标签触发打包与发布。
 推送版本标签时，先通过测试和
 标签一致性检查，再并行构建四个目标；全部成功后汇总校验和并上传安装包，
 上传全部完成后自动发布 GitHub Release。上传期间暂存为草稿，避免发布缺少附件的版本。
