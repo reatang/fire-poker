@@ -1,17 +1,17 @@
 {
   "fixed": {
-    "file_version": "0.3.0"
+    "file_version": "0.4.0"
   },
   "info": {
     "0804": {
-      "ProductVersion": "0.3.0",
+      "ProductVersion": "0.4.0",
       "CompanyName": "reatang",
       "FileDescription": "一个经典模式的智能体客户端",
       "LegalCopyright": "",
       "ProductName": "Fire Poker",
       "Comments": "Fire Poker",
       "OriginalFilename": "fire-poker.exe",
-      "FileVersion": "0.3.0"
+      "FileVersion": "0.4.0"
     }
   }
 }
