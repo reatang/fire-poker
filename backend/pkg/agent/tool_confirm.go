@@ -21,12 +21,14 @@ func (m *Manager) newToolCallbacks() *toolpkg.Callbacks {
 		) (*toolpkg.BeforeToolResult, error) {
 			meta, ok := m.lookupToolMeta(args.ToolName)
 			if !ok {
-				return nil, nil
+				// Tools missing from every catalog fail closed and must be approved explicitly.
+				meta = unknownToolMeta(args.ToolName)
 			}
 
 			runInfo, ok := getRunContext(ctx)
 			if !ok {
-				return nil, nil
+				// Without a run context there is no session to ask, so refuse instead of running unreviewed.
+				return buildDeniedToolResult("missing run context"), nil
 			}
 
 			purpose := ""
@@ -54,12 +56,7 @@ func (m *Manager) newToolCallbacks() *toolpkg.Callbacks {
 				decision = ToolConfirmDecision{RequireConfirm: true, Reason: "fallback after policy error", Source: "fallback"}
 			}
 			if decision.Deny {
-				return &toolpkg.BeforeToolResult{
-					CustomResult: map[string]any{
-						"error":  buildDeniedToolMessage(decision.Reason),
-						"reason": decision.Reason,
-					},
-				}, nil
+				return buildDeniedToolResult(decision.Reason), nil
 			}
 			shouldConfirm := decision.RequireConfirm
 			if !shouldConfirm {
@@ -197,6 +194,18 @@ func (m *Manager) lookupToolMeta(toolName string) (tools.ToolMeta, bool) {
 	return tools.ToolMeta{}, false
 }
 
+// unknownToolMeta describes a tool absent from the registry and extension config so it always requires approval.
+func unknownToolMeta(toolName string) tools.ToolMeta {
+	return tools.ToolMeta{
+		Name:            toolName,
+		Category:        tools.CategoryUser,
+		RequiresConfirm: true,
+		FormatPurpose: func(args json.RawMessage) string {
+			return fmt.Sprintf("Run unregistered tool %s with arguments %s", toolName, string(args))
+		},
+	}
+}
+
 func (m *Manager) emitToolConfirmRequest(sessionID uint, requestID, toolName, args, purpose string) {
 	app := m.App()
 	if app == nil {
@@ -239,6 +248,16 @@ func buildDeniedToolMessage(reason string) string {
 		return "tool execution denied by policy"
 	}
 	return fmt.Sprintf("tool execution denied by policy: %s", reason)
+}
+
+// buildDeniedToolResult short-circuits a tool call with a synthetic policy-denial result.
+func buildDeniedToolResult(reason string) *toolpkg.BeforeToolResult {
+	return &toolpkg.BeforeToolResult{
+		CustomResult: map[string]any{
+			"error":  buildDeniedToolMessage(reason),
+			"reason": reason,
+		},
+	}
 }
 
 func normalizeConfirmAction(resp ConfirmResponse) string {
