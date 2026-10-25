@@ -11,8 +11,9 @@ import (
 	"strings"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
-	"github.com/reatang/fire-poker/backend/pkg/id/event_id"
+	"github.com/reatang/fire-poker/backend/pkg/i18n"
 	"github.com/reatang/fire-poker/backend/pkg/ierror"
+	"github.com/reatang/fire-poker/backend/storage"
 	agentpkg "trpc.group/trpc-go/trpc-agent-go/agent"
 	"trpc.group/trpc-go/trpc-agent-go/event"
 	"trpc.group/trpc-go/trpc-agent-go/model"
@@ -46,19 +47,9 @@ func NewChatHandler(m *Manager) *ChatHandler {
 	return &ChatHandler{manager: m}
 }
 
-func (ch *ChatHandler) emitEvent(name string, data any) {
-	app := ch.manager.App()
-	if app != nil {
-		app.Event.Emit(name, data)
-	}
-}
-
+// updateSessionStatus persists and broadcasts a session status change.
 func (ch *ChatHandler) updateSessionStatus(sessionID uint, status string) {
-	_ = ch.manager.Storage().UpdateSessionStatus(sessionID, status)
-	ch.emitEvent(event_id.AgentSessionStatus, map[string]any{
-		"sessionId": sessionID,
-		"status":    status,
-	})
+	ch.manager.updateSessionStatus(sessionID, status)
 }
 
 func (ch *ChatHandler) loadSessionHistory(sessionID uint) ([]model.Message, error) {
@@ -197,7 +188,16 @@ func toolCallFingerprint(toolName, args string) string {
 	return toolName + "\x00" + args
 }
 
+// preparedTurn holds what prepareTurn loaded before anything is written.
+type preparedTurn struct {
+	// regenerationQuestionID is the original question being retried, or 0 for a new question.
+	regenerationQuestionID uint
+	history                []model.Message
+	attachmentsJSON        string
+}
+
 // SendMessage starts a streaming run and consumes events asynchronously.
+// Steps run in a fixed order: read-only preparation, prompt resolution, persistence, then the run.
 func (ch *ChatHandler) SendMessage(ctx context.Context, params SendMessageParams) error {
 	streamCtx, cancel, err := ch.manager.Streams().TryStart(context.WithoutCancel(ctx), params.SessionID)
 	if err != nil {
@@ -210,98 +210,130 @@ func (ch *ChatHandler) SendMessage(ctx context.Context, params SendMessageParams
 			ch.manager.Streams().Remove(params.SessionID)
 		}
 	}()
-	// Resolve credentials before any write so an invalid provider leaves no orphaned user message.
-	params.model, err = ch.manager.ResolveModelConfig(params.ProviderID, params.ModelName)
-	if err != nil {
-		return fmt.Errorf("resolve model: %w", err)
-	}
-	params.ModelName = params.model.ModelName
-	stor := ch.manager.Storage()
-	var regenerationQuestionID uint
-	if params.RegenerateMessageID > 0 {
-		question, err := stor.RegenerationTurn(params.SessionID, params.RegenerateMessageID)
-		if err != nil {
-			return err
-		}
-		regenerationQuestionID = question.ID
-		params.Content = question.Content
-		params.Attachments, err = UnmarshalAttachments(question.Attachments)
-		if err != nil {
-			return fmt.Errorf("load original attachments: %w", err)
-		}
-	}
-	history, err := ch.loadSessionHistoryBefore(params.SessionID, regenerationQuestionID)
+
+	turn, err := ch.prepareTurn(&params)
 	if err != nil {
 		return err
 	}
-
-	attachmentsJSON, err := MarshalAttachments(params.Attachments)
+	session, err := ch.resolveSessionPrompt(&params)
 	if err != nil {
-		return fmt.Errorf("marshal attachments: %w", err)
+		return err
+	}
+	if turn.regenerationQuestionID == 0 {
+		if err := ch.persistUserMessage(params, turn.attachmentsJSON); err != nil {
+			return err
+		}
 	}
 
+	_ = ch.manager.Storage().TouchSession(params.SessionID)
+	ch.updateSessionStatus(params.SessionID, "loading")
+
+	if err := ch.startRun(streamCtx, cancel, params, turn, session); err != nil {
+		return err
+	}
+	started = true
+	return nil
+}
+
+// prepareTurn resolves credentials and loads the turn's inputs without writing anything,
+// so an invalid provider or regeneration target leaves no orphaned user message.
+func (ch *ChatHandler) prepareTurn(params *SendMessageParams) (preparedTurn, error) {
+	var turn preparedTurn
+	var err error
+	params.model, err = ch.manager.ResolveModelConfig(params.ProviderID, params.ModelName)
+	if err != nil {
+		return turn, fmt.Errorf("resolve model: %w", err)
+	}
+	params.ModelName = params.model.ModelName
+
+	if params.RegenerateMessageID > 0 {
+		question, err := ch.manager.Storage().RegenerationTurn(params.SessionID, params.RegenerateMessageID)
+		if err != nil {
+			return turn, err
+		}
+		// A retry replays the original question; whatever content the caller sent is ignored.
+		turn.regenerationQuestionID = question.ID
+		params.Content = question.Content
+		params.Attachments, err = UnmarshalAttachments(question.Attachments)
+		if err != nil {
+			return turn, fmt.Errorf("load original attachments: %w", err)
+		}
+	}
+	turn.history, err = ch.loadSessionHistoryBefore(params.SessionID, turn.regenerationQuestionID)
+	if err != nil {
+		return turn, err
+	}
+	turn.attachmentsJSON, err = MarshalAttachments(params.Attachments)
+	if err != nil {
+		return turn, fmt.Errorf("marshal attachments: %w", err)
+	}
+	return turn, nil
+}
+
+// resolveSessionPrompt freezes the session's tool selection and system prompt on its first turn.
+// A started conversation keeps its prompt; asking for a different one is rejected.
+func (ch *ChatHandler) resolveSessionPrompt(params *SendMessageParams) (*data_models.Session, error) {
+	stor := ch.manager.Storage()
 	session, err := stor.GetSession(params.SessionID)
 	if err != nil {
-		return fmt.Errorf("get session: %w", err)
+		return nil, fmt.Errorf("get session: %w", err)
 	}
 	params.EnabledUserTools, err = ch.manager.ToolsForTurn(params.SessionID, params.EnabledUserTools)
 	if err != nil {
-		return fmt.Errorf("resolve session tools: %w", err)
+		return nil, fmt.Errorf("resolve session tools: %w", err)
 	}
-	if requested := strings.TrimSpace(params.SystemPrompt); requested != "" {
+
+	requested := strings.TrimSpace(params.SystemPrompt)
+	if requested == "" && strings.TrimSpace(session.SystemPrompt) != "" {
+		return session, nil
+	}
+	count, err := stor.CountMessagesForSession(params.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	if requested != "" {
 		effective := session.SystemPrompt
 		if strings.TrimSpace(effective) == "" {
 			effective = DefaultSystemPrompt()
 		}
-		count, err := stor.CountMessagesForSession(params.SessionID)
-		if err != nil {
-			return err
-		}
 		if count > 0 && requested != strings.TrimSpace(effective) {
-			return fmt.Errorf("已开始聊天的对话不能更换系统提示词，请新建对话")
+			return nil, storage.ErrSystemPromptLocked
 		}
 		if count == 0 {
-			if err := stor.UpdateSessionPrompt(params.SessionID, params.SystemPrompt, "自定义系统提示词"); err != nil {
-				return err
+			if err := stor.UpdateSessionPrompt(params.SessionID, params.SystemPrompt, i18n.TCurrent(storage.PromptNameCustomKey, nil)); err != nil {
+				return nil, err
 			}
 			session.SystemPrompt = params.SystemPrompt
 		}
 	}
-
-	if strings.TrimSpace(session.SystemPrompt) == "" {
-		count, err := stor.CountMessagesForSession(params.SessionID)
-		if err != nil {
-			return err
-		}
-		if count == 0 {
-			session.SystemPrompt = DefaultSystemPrompt()
-			if err := stor.UpdateSessionPrompt(params.SessionID, session.SystemPrompt, "默认系统提示词"); err != nil {
-				return err
-			}
+	if strings.TrimSpace(session.SystemPrompt) == "" && count == 0 {
+		session.SystemPrompt = DefaultSystemPrompt()
+		if err := stor.UpdateSessionPrompt(params.SessionID, session.SystemPrompt, i18n.TCurrent(storage.PromptNameDefaultKey, nil)); err != nil {
+			return nil, err
 		}
 	}
-	if regenerationQuestionID == 0 {
-		_, err = stor.CreateMessage(data_models.Message{
-			SessionID:   params.SessionID,
-			Role:        "user",
-			ContentType: "text",
-			Content:     params.Content,
-			Attachments: attachmentsJSON,
-		})
-		if err != nil {
-			return fmt.Errorf("save user message: %w", err)
-		}
+	return session, nil
+}
+
+// persistUserMessage stores the new question before the model sees it.
+func (ch *ChatHandler) persistUserMessage(params SendMessageParams, attachmentsJSON string) error {
+	_, err := ch.manager.Storage().CreateMessage(data_models.Message{
+		SessionID:   params.SessionID,
+		Role:        "user",
+		ContentType: "text",
+		Content:     params.Content,
+		Attachments: attachmentsJSON,
+	})
+	if err != nil {
+		return fmt.Errorf("save user message: %w", err)
 	}
+	return nil
+}
 
-	_ = stor.TouchSession(params.SessionID)
-	ch.updateSessionStatus(params.SessionID, "loading")
-
-	r, err := ch.manager.GetOrCreateRunner(
-		params.model,
-		params.EnabledUserTools,
-		session.Kind,
-		params.SessionID,
-	)
+// startRun launches the runner and hands its events to a background consumer.
+// On failure it marks the session as errored; the caller releases the stream reservation.
+func (ch *ChatHandler) startRun(streamCtx context.Context, cancel context.CancelFunc, params SendMessageParams, turn preparedTurn, session *data_models.Session) error {
+	r, err := ch.manager.GetOrCreateRunner(params.model, params.EnabledUserTools, session.Kind, params.SessionID)
 	if err != nil {
 		ch.updateSessionStatus(params.SessionID, "error-unread")
 		return fmt.Errorf("get runner: %w", err)
@@ -311,10 +343,13 @@ func (ch *ChatHandler) SendMessage(ctx context.Context, params SendMessageParams
 	// SDK history is seeded only once. Use a fresh temporary SDK session per
 	// turn so SQLite remains authoritative, including interrupted output.
 	sessionIDStr := strconv.FormatUint(uint64(params.SessionID), 10) + "-" + rand.Text()
+	deleteSDKSession := func() {
+		_ = ch.manager.sessionService.DeleteSession(context.Background(), pkgSession.Key{AppName: "fire-poker", UserID: userID, SessionID: sessionIDStr})
+	}
 
-	runOptions := make([]agentpkg.RunOption, 0, 1)
-	if len(history) > 0 {
-		runOptions = append(runOptions, agentpkg.WithMessages(history))
+	runOptions := make([]agentpkg.RunOption, 0, 2)
+	if len(turn.history) > 0 {
+		runOptions = append(runOptions, agentpkg.WithMessages(turn.history))
 	}
 
 	runCtx := withRunContext(streamCtx, runContext{
@@ -332,17 +367,10 @@ func (ch *ChatHandler) SendMessage(ctx context.Context, params SendMessageParams
 	if strings.TrimSpace(basePrompt) == "" {
 		basePrompt = DefaultSystemPrompt()
 	}
-	systemPrompt := ch.memorySystemPrompt(basePrompt, params.Content)
-	runOptions = append(runOptions, agentpkg.WithInstruction(systemPrompt))
+	runOptions = append(runOptions, agentpkg.WithInstruction(ch.memorySystemPrompt(basePrompt, params.Content)))
 	userMsg := BuildUserMessage(buildRunContent("", params.PrimedSkill, params.Content), params.Attachments)
 
-	events, err := r.Run(
-		runCtx,
-		userID,
-		sessionIDStr,
-		userMsg,
-		runOptions...,
-	)
+	events, err := r.Run(runCtx, userID, sessionIDStr, userMsg, runOptions...)
 	if err != nil {
 		cancel()
 		ch.manager.Streams().Remove(params.SessionID)
@@ -350,25 +378,25 @@ func (ch *ChatHandler) SendMessage(ctx context.Context, params SendMessageParams
 		return fmt.Errorf("runner.Run: %w", err)
 	}
 
-	if regenerationQuestionID > 0 {
-		if err := stor.ArchiveRegeneratedResponse(params.SessionID, regenerationQuestionID, params.RegenerateMessageID); err != nil {
+	if turn.regenerationQuestionID > 0 {
+		// Archive only after the retry has started, so a failed start keeps the previous answer.
+		if err := ch.manager.Storage().ArchiveRegeneratedResponse(params.SessionID, turn.regenerationQuestionID, params.RegenerateMessageID); err != nil {
 			cancel()
 			go func() {
 				for range events {
 				}
-				_ = ch.manager.sessionService.DeleteSession(context.Background(), pkgSession.Key{AppName: "fire-poker", UserID: userID, SessionID: sessionIDStr})
+				deleteSDKSession()
 			}()
 			ch.updateSessionStatus(params.SessionID, "error-unread")
 			return fmt.Errorf("archive previous response: %w", err)
 		}
 	}
-	started = true
 	go func() {
 		ch.consumeEventsWithParams(streamCtx, params, events)
 		// Drain runner shutdown before removing its temporary session.
 		for range events {
 		}
-		_ = ch.manager.sessionService.DeleteSession(context.Background(), pkgSession.Key{AppName: "fire-poker", UserID: userID, SessionID: sessionIDStr})
+		deleteSDKSession()
 	}()
 	return nil
 }
@@ -428,7 +456,7 @@ func (ch *ChatHandler) consumeEventsWithParams(ctx context.Context, params SendM
 		if err := stor.CreateMessages(&output); err != nil {
 			log.Printf("persist session %d output: %v", sessionID, err)
 			failed = true
-			ch.emitEvent(event_id.AgentStreamError, map[string]any{"sessionId": sessionID, "error": "回答保存失败：" + err.Error()})
+			emitStreamError(ch.manager.App(), StreamErrorEvent{SessionID: sessionID, Error: ierror.ErrAgentSaveOutput.Msg() + ": " + err.Error()})
 		}
 		status := "done-unread"
 		if interrupted {
@@ -437,7 +465,7 @@ func (ch *ChatHandler) consumeEventsWithParams(ctx context.Context, params SendM
 			status = "error-unread"
 		}
 		ch.updateSessionStatus(sessionID, status)
-		ch.emitEvent(event_id.AgentStreamDone, map[string]any{"sessionId": sessionID, "interrupted": interrupted, "usage": map[string]int{"input": tokensIn, "output": tokensOut}})
+		emitStreamDone(ch.manager.App(), StreamDoneEvent{SessionID: sessionID, Interrupted: interrupted, Usage: TokenUsage{Input: tokensIn, Output: tokensOut}})
 		if !interrupted && !failed {
 			ch.enqueueMemoryEncoding(params, fullContent)
 		}
@@ -447,12 +475,12 @@ func (ch *ChatHandler) consumeEventsWithParams(ctx context.Context, params SendM
 
 	emitChunk := func(delta, contentType, content string) {
 		streamSeq++
-		ch.emitEvent(event_id.AgentStreamChunk, map[string]any{
-			"sessionId":   sessionID,
-			"seq":         streamSeq,
-			"delta":       delta,
-			"content":     content,
-			"contentType": contentType,
+		emitStreamChunk(ch.manager.App(), StreamChunkEvent{
+			SessionID:   sessionID,
+			Seq:         streamSeq,
+			Delta:       delta,
+			Content:     content,
+			ContentType: contentType,
 		})
 	}
 
@@ -480,10 +508,7 @@ func (ch *ChatHandler) consumeEventsWithParams(ctx context.Context, params SendM
 
 		if evt.Error != nil {
 			failed = true
-			ch.emitEvent(event_id.AgentStreamError, map[string]any{
-				"sessionId": sessionID,
-				"error":     evt.Error.Message,
-			})
+			emitStreamError(ch.manager.App(), StreamErrorEvent{SessionID: sessionID, Error: evt.Error.Message})
 			ch.updateSessionStatus(sessionID, "error-unread")
 			errContent, _ := json.Marshal(map[string]string{
 				"msg":    ierror.ErrAgentStreamError.Msg(),
@@ -578,11 +603,11 @@ func (ch *ChatHandler) consumeEventsWithParams(ctx context.Context, params SendM
 					"args": json.RawMessage(args),
 				})
 
-				ch.emitEvent(event_id.AgentStreamToolCall, map[string]any{
-					"sessionId": sessionID,
-					"toolName":  toolName,
-					"args":      args,
-					"purpose":   purpose,
+				emitStreamToolCall(ch.manager.App(), StreamToolCallEvent{
+					SessionID: sessionID,
+					ToolName:  toolName,
+					Args:      args,
+					Purpose:   purpose,
 				})
 
 				_, _ = stor.CreateMessage(data_models.Message{
@@ -598,10 +623,10 @@ func (ch *ChatHandler) consumeEventsWithParams(ctx context.Context, params SendM
 
 			if message.ToolID != "" {
 				lastToolCallFingerprint = ""
-				ch.emitEvent(event_id.AgentStreamToolResult, map[string]any{
-					"sessionId": sessionID,
-					"toolName":  message.ToolName,
-					"result":    message.Content,
+				emitStreamToolResult(ch.manager.App(), StreamToolResultEvent{
+					SessionID: sessionID,
+					ToolName:  message.ToolName,
+					Result:    message.Content,
 				})
 				_, _ = stor.CreateMessage(data_models.Message{
 					SessionID:   sessionID,

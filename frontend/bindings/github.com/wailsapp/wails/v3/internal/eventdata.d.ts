@@ -5,9 +5,21 @@
 // @ts-ignore: Unused imports
 import type { Events } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import type * as agent$0 from "../../../../reatang/fire-poker/backend/pkg/agent/models.js";
+
 declare module "@wailsio/runtime" {
     namespace Events {
         interface CustomEvents {
+            "agent:session:spawned": agent$0.SessionSpawnedEvent;
+            "agent:session:status": agent$0.SessionStatusEvent;
+            "agent:stream:chunk": agent$0.StreamChunkEvent;
+            "agent:stream:confirm_request": agent$0.StreamConfirmRequestEvent;
+            "agent:stream:done": agent$0.StreamDoneEvent;
+            "agent:stream:error": agent$0.StreamErrorEvent;
+            "agent:stream:tool_call": agent$0.StreamToolCallEvent;
+            "agent:stream:tool_result": agent$0.StreamToolResultEvent;
             "time": string;
         }
     }

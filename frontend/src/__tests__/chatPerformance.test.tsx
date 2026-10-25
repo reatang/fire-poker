@@ -7,7 +7,9 @@ import { useChatStore } from '@/store/chatStore'
 
 const eventHandlers = new Map<string, (event: { data: unknown }) => void>()
 
-vi.mock('@wailsio/runtime', () => ({
+vi.mock('@wailsio/runtime', async (importOriginal) => ({
+  // Keep the real Create helpers: generated event bindings use them at import time.
+  ...(await importOriginal<typeof import('@wailsio/runtime')>()),
   Events: {
     On: vi.fn((name: string, handler: (event: { data: unknown }) => void) => {
       eventHandlers.set(name, handler)

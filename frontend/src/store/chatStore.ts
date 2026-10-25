@@ -3,6 +3,7 @@ import { preferredModel } from '@/lib/modelSelection'
 import { useModelSelectionStore } from './modelSelectionStore'
 import { Events } from '@wailsio/runtime'
 import { Agent as AgentBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/agent'
+import * as ChatEvents from '@bindings/events'
 import type {
   Attachment,
   ConfirmRequestEvent,
@@ -85,6 +86,11 @@ interface ChatStore {
   generateTitle: (sessionId: number, config: ModelRunConfig) => Promise<void>
   generateTitleDraft: (sessionId: number, fallbackConfig?: TitleGenerationConfig) => Promise<string | null>
   initEventListeners: () => () => void
+}
+
+// Generated event payloads type enum-like fields as plain strings; narrow them at the boundary.
+function asStreamChunkEvent(raw: Omit<StreamChunkEvent, 'contentType'> & { contentType: string }): StreamChunkEvent {
+  return { ...raw, contentType: raw.contentType === 'thinking' ? 'thinking' : 'text' }
 }
 
 function eventItems<T>(event: { data: T | T[] }): T[] {
@@ -754,16 +760,17 @@ export const useChatStore = create<ChatStore>()((set, get) => {
 
     const offs: Array<() => void> = []
 
-    offs.push(Events.On('agent:stream:chunk', (event: { data: StreamChunkEvent | StreamChunkEvent[] }) => {
-      for (const data of eventItems(event)) {
-        if (!data) continue
+    offs.push(Events.On(ChatEvents.AgentStreamChunk, (event) => {
+      for (const raw of eventItems(event)) {
+        if (!raw) continue
+        const data = asStreamChunkEvent(raw)
 
         ensureStreamingPlaceholder(data.sessionId)
         appendStreamingDelta(data)
       }
     }))
 
-    offs.push(Events.On('agent:stream:confirm_request', (event: { data: ConfirmRequestEvent | ConfirmRequestEvent[] }) => {
+    offs.push(Events.On(ChatEvents.AgentStreamConfirmRequest, (event: { data: ConfirmRequestEvent | ConfirmRequestEvent[] }) => {
       for (const data of eventItems(event)) {
         if (!data) continue
 
@@ -781,7 +788,7 @@ export const useChatStore = create<ChatStore>()((set, get) => {
       }
     }))
 
-    offs.push(Events.On('agent:stream:tool_call', (event: { data: ToolCallEvent | ToolCallEvent[] }) => {
+    offs.push(Events.On(ChatEvents.AgentStreamToolCall, (event: { data: ToolCallEvent | ToolCallEvent[] }) => {
       for (const data of eventItems(event)) {
         if (!data) continue
 
@@ -826,7 +833,7 @@ export const useChatStore = create<ChatStore>()((set, get) => {
       }
     }))
 
-    offs.push(Events.On('agent:stream:tool_result', (event: { data: ToolResultEvent | ToolResultEvent[] }) => {
+    offs.push(Events.On(ChatEvents.AgentStreamToolResult, (event: { data: ToolResultEvent | ToolResultEvent[] }) => {
       for (const data of eventItems(event)) {
         if (!data) continue
 
@@ -880,7 +887,7 @@ export const useChatStore = create<ChatStore>()((set, get) => {
       }
     }))
 
-    offs.push(Events.On('agent:stream:done', (event: { data: StreamDoneEvent | StreamDoneEvent[] }) => {
+    offs.push(Events.On(ChatEvents.AgentStreamDone, (event: { data: StreamDoneEvent | StreamDoneEvent[] }) => {
       for (const data of eventItems(event)) {
         if (!data) continue
 
@@ -903,7 +910,7 @@ export const useChatStore = create<ChatStore>()((set, get) => {
       }
     }))
 
-    offs.push(Events.On('agent:stream:error', (event: { data: StreamErrorEvent | StreamErrorEvent[] }) => {
+    offs.push(Events.On(ChatEvents.AgentStreamError, (event: { data: StreamErrorEvent | StreamErrorEvent[] }) => {
       for (const data of eventItems(event)) {
         if (!data) continue
 
@@ -926,7 +933,7 @@ export const useChatStore = create<ChatStore>()((set, get) => {
       }
     }))
 
-    offs.push(Events.On('agent:session:spawned', (event: { data: { sessionId: number; title: string; kind: string; tags?: string[]; userMessage?: string } | { sessionId: number; title: string; kind: string; tags?: string[]; userMessage?: string }[] }) => {
+    offs.push(Events.On(ChatEvents.AgentSessionSpawned, (event: { data: { sessionId: number; title: string; kind: string; tags?: string[]; userMessage?: string } | { sessionId: number; title: string; kind: string; tags?: string[]; userMessage?: string }[] }) => {
       for (const data of eventItems(event)) {
         if (!data) continue
         if (get().conversations.some((c) => c.id === data.sessionId)) continue
@@ -993,9 +1000,10 @@ export const useChatStore = create<ChatStore>()((set, get) => {
       }
     }))
 
-    offs.push(Events.On('agent:session:status', (event: { data: SessionStatusEvent | SessionStatusEvent[] }) => {
-      for (const data of eventItems(event)) {
-        if (!data) continue
+    offs.push(Events.On(ChatEvents.AgentSessionStatus, (event) => {
+      for (const raw of eventItems(event)) {
+        if (!raw) continue
+        const data: SessionStatusEvent = { sessionId: raw.sessionId, status: raw.status as ConversationStatus }
 
         // Unknown session (e.g. a task spawned from another window) — reload list
         const known = get().conversations.some((c) => c.id === data.sessionId)

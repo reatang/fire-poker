@@ -182,8 +182,7 @@ func TestBuildAgentToolsIncludesWebToolsByDefault(t *testing.T) {
 }
 
 func TestBuildAgentToolsIncludesTaskStateToolsForTaskSessions(t *testing.T) {
-	manager := NewManager(nil)
-	manager.SetCliInstallProgressReporter(&fakeCliInstallProgressReporter{})
+	manager := NewManagerWithDeps(nil, ManagerDeps{CliInstallProgress: &fakeCliInstallProgressReporter{}})
 
 	agentTools, err := manager.buildAgentTools(nil, "task", 1)
 	if err != nil {

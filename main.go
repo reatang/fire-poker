@@ -106,7 +106,7 @@ func main() {
 		}
 	}, quickChatShortcut)
 	settingsService := settings.NewSettings(settings.Dependencies{QuickChatShortcuts: quickChatService, SessionToolDefaults: istorage})
-	agentService := agentSvc.NewAgent(istorage, agentSvc.Dependencies{
+	agentService := agentSvc.NewAgentWithDeps(istorage, agentSvc.Dependencies{
 		SkillProvider:        skillsManager,
 		AttentionRequester:   notificationService,
 		SkillCreator:         skillsManager,

@@ -2,9 +2,12 @@ package agent
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"sync"
 )
+
+// ErrSessionBusy reports that a session already has a turn starting, generating or saving.
+var ErrSessionBusy = errors.New("session is still generating or saving")
 
 type activeStream struct {
 	cancel    context.CancelFunc
@@ -71,7 +74,7 @@ func (sm *StreamManager) TryStart(parent context.Context, sessionID uint) (conte
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	if _, ok := sm.streams[sessionID]; ok {
-		return nil, nil, fmt.Errorf("当前会话仍在生成或保存，请稍后再试")
+		return nil, nil, ErrSessionBusy
 	}
 	ctx, cancel := context.WithCancel(parent)
 	sm.streams[sessionID] = &activeStream{cancel: cancel, confirmCh: make(chan ConfirmResponse, 1), done: make(chan struct{})}
@@ -107,7 +110,7 @@ func (sm *StreamManager) WhileInactive(sessionID uint, update func() error) erro
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	if _, active := sm.streams[sessionID]; active {
-		return fmt.Errorf("对话正在开始或生成，不能修改工具选择")
+		return ErrSessionBusy
 	}
 	return update()
 }

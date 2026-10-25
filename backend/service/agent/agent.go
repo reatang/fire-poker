@@ -11,12 +11,9 @@ import (
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	pkgAgent "github.com/reatang/fire-poker/backend/pkg/agent"
-	"github.com/reatang/fire-poker/backend/pkg/agent/tools"
-	"github.com/reatang/fire-poker/backend/pkg/id/event_id"
 	"github.com/reatang/fire-poker/backend/pkg/id/prompt_id"
 	"github.com/reatang/fire-poker/backend/pkg/ierror"
 	"github.com/reatang/fire-poker/backend/pkg/prompt"
-	pkgterminal "github.com/reatang/fire-poker/backend/pkg/terminal"
 	"github.com/reatang/fire-poker/backend/service/agent/agent_dto"
 	"github.com/reatang/fire-poker/backend/storage"
 )
@@ -27,47 +24,16 @@ type Agent struct {
 }
 
 // Dependencies groups optional agent integrations that are only needed at app startup.
-type Dependencies struct {
-	SkillProvider        tools.SkillProvider
-	AttentionRequester   tools.AttentionRequester
-	SkillCreator         tools.SkillCreator
-	CliInstaller         tools.CliInstaller
-	CliInstallProgress   tools.CliInstallProgressReporter
-	CliManifestGenerator tools.CliManifestGenerator
-	CliCommandRunner     tools.CliCommandRunner
-	TerminalRunner       *pkgterminal.Manager
+type Dependencies = pkgAgent.ManagerDeps
+
+// NewAgent creates an agent service without optional tool services.
+func NewAgent(istorage *storage.Storage) *Agent {
+	return NewAgentWithDeps(istorage, Dependencies{})
 }
 
-// NewAgent creates an agent service backed by application storage.
-func NewAgent(istorage *storage.Storage, deps ...Dependencies) *Agent {
-	svc := &Agent{manager: pkgAgent.NewManager(istorage)}
-	if len(deps) > 0 {
-		if deps[0].SkillProvider != nil {
-			svc.manager.SetSkillProvider(deps[0].SkillProvider)
-		}
-		if deps[0].AttentionRequester != nil {
-			svc.manager.SetAttentionRequester(deps[0].AttentionRequester)
-		}
-		if deps[0].SkillCreator != nil {
-			svc.manager.SetSkillCreator(deps[0].SkillCreator)
-		}
-		if deps[0].CliInstaller != nil {
-			svc.manager.SetCliInstaller(deps[0].CliInstaller)
-		}
-		if deps[0].CliInstallProgress != nil {
-			svc.manager.SetCliInstallProgressReporter(deps[0].CliInstallProgress)
-		}
-		if deps[0].CliManifestGenerator != nil {
-			svc.manager.SetCliManifestGenerator(deps[0].CliManifestGenerator)
-		}
-		if deps[0].CliCommandRunner != nil {
-			svc.manager.SetCliCommandRunner(deps[0].CliCommandRunner)
-		}
-		if deps[0].TerminalRunner != nil {
-			svc.manager.SetTerminalRunner(deps[0].TerminalRunner)
-		}
-	}
-	return svc
+// NewAgentWithDeps creates an agent service wired to the application's tool services.
+func NewAgentWithDeps(istorage *storage.Storage, deps Dependencies) *Agent {
+	return &Agent{manager: pkgAgent.NewManagerWithDeps(istorage, deps)}
 }
 
 func (a *Agent) SendMessage(ctx context.Context, input agent_dto.SendMessageInput) (*agent_dto.SendMessageOutput, error) {
@@ -89,7 +55,7 @@ func (a *Agent) SendMessage(ctx context.Context, input agent_dto.SendMessageInpu
 		Attachments:         atts,
 	})
 	if err != nil {
-		return nil, ierror.Error(ierror.ErrAgentSendMessage, err)
+		return nil, agentError(ierror.ErrAgentSendMessage, err)
 	}
 	return &agent_dto.SendMessageOutput{}, nil
 }
@@ -204,15 +170,13 @@ func (a *Agent) SpawnTaskSession(ctx context.Context, input agent_dto.SpawnTaskS
 		return nil, ierror.Error(ierror.ErrAgentCreateSession, err)
 	}
 
-	if app := a.manager.App(); app != nil {
-		app.Event.Emit(event_id.AgentSessionSpawned, map[string]any{
-			"sessionId":   session.ID,
-			"title":       session.Title,
-			"kind":        session.Kind,
-			"tags":        []string{"task"},
-			"userMessage": input.UserMessage,
-		})
-	}
+	pkgAgent.EmitSessionSpawned(a.manager.App(), pkgAgent.SessionSpawnedEvent{
+		SessionID:   session.ID,
+		Title:       session.Title,
+		Kind:        session.Kind,
+		Tags:        []string{"task"},
+		UserMessage: input.UserMessage,
+	})
 
 	go func() {
 		handler := a.manager.NewChatHandler()

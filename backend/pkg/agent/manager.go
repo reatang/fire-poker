@@ -9,7 +9,6 @@ import (
 	"github.com/reatang/fire-poker/backend/pkg/agent/toolkit"
 	"github.com/reatang/fire-poker/backend/pkg/agent/tools"
 	"github.com/reatang/fire-poker/backend/pkg/dir"
-	"github.com/reatang/fire-poker/backend/pkg/id/event_id"
 	"github.com/reatang/fire-poker/backend/pkg/id/prompt_id"
 	pkgMCP "github.com/reatang/fire-poker/backend/pkg/mcp"
 	"github.com/reatang/fire-poker/backend/pkg/prompt"
@@ -28,51 +27,59 @@ import (
 const defaultMainAgentPrompt = prompt.DefaultMainAgentPrompt
 const defaultGenChatTitlePrompt = `Generate a concise title under 20 characters for this conversation. Return only the title.`
 
+// ManagerDeps groups the optional application services tools depend on. They are fixed at
+// construction; a nil field leaves the corresponding tool unavailable.
+type ManagerDeps struct {
+	SkillProvider        tools.SkillProvider
+	AttentionRequester   tools.AttentionRequester
+	SkillCreator         tools.SkillCreator
+	CliInstaller         tools.CliInstaller
+	CliInstallProgress   tools.CliInstallProgressReporter
+	CliManifestGenerator tools.CliManifestGenerator
+	CliCommandRunner     tools.CliCommandRunner
+	TerminalRunner       *pkgterminal.Manager
+}
+
 // Manager manages runners, prompts, and tool registration for the main agent.
 type Manager struct {
-	mu                      sync.RWMutex
-	istorage                *storage.Storage
-	wailsApp                *application.App
-	toolRegistry            toolkit.Manager
-	toolDependenciesVersion uint64
-	streamManager           *StreamManager
-	runners                 *runnerCache
-	mcpManager              *pkgMCP.Manager
-	skillProvider           tools.SkillProvider
-	attention               tools.AttentionRequester
-	skillCreator            tools.SkillCreator
-	cliInstaller            tools.CliInstaller
-	cliInstallProgress      tools.CliInstallProgressReporter
-	cliManifestGenerator    tools.CliManifestGenerator
-	cliCommandRunner        tools.CliCommandRunner
-	terminalRunner          *pkgterminal.Manager
-	toolConfirmDecider      ToolConfirmDecider
-	memoryEncodeSem         chan struct{}
-	sessionService          *inmemory.SessionService
+	mu       sync.RWMutex
+	istorage *storage.Storage
+	// deps is immutable after construction, so tool factories read it without locking.
+	deps     ManagerDeps
+	wailsApp *application.App
+	// appVersion changes when the Wails app handle is replaced, invalidating runners whose tools captured it.
+	appVersion         uint64
+	toolRegistry       toolkit.Manager
+	streamManager      *StreamManager
+	runners            *runnerCache
+	mcpManager         *pkgMCP.Manager
+	toolConfirmDecider ToolConfirmDecider
+	memoryEncodeSem    chan struct{}
+	sessionService     *inmemory.SessionService
 }
 
 type toolResultEmitter struct {
 	app *application.App
 }
 
+// EmitToolResult forwards progress that long-running tools report before they return.
 func (e toolResultEmitter) EmitToolResult(sessionID uint, toolName, result string) {
-	if e.app == nil {
-		return
-	}
-	e.app.Event.Emit(event_id.AgentStreamToolResult, map[string]any{
-		"sessionId": sessionID,
-		"toolName":  toolName,
-		"result":    result,
-	})
+	emitStreamToolResult(e.app, StreamToolResultEvent{SessionID: sessionID, ToolName: toolName, Result: result})
 }
 
-// NewManager creates a new manager and registers the default main-agent prompt/tools.
+// NewManager creates a manager without optional tool services; tests and minimal setups use it.
 func NewManager(istorage *storage.Storage) *Manager {
+	return NewManagerWithDeps(istorage, ManagerDeps{})
+}
+
+// NewManagerWithDeps creates a manager wired to application services and registers the default prompts/tools.
+func NewManagerWithDeps(istorage *storage.Storage, deps ManagerDeps) *Manager {
 	prompt.Register(prompt_id.MainAgent, defaultMainAgentPrompt)
 	prompt.Register(prompt_id.GenChatTitle, defaultGenChatTitlePrompt)
 
 	m := &Manager{
 		istorage:           istorage,
+		deps:               deps,
 		toolRegistry:       toolkit.NewRegistry(),
 		streamManager:      NewStreamManager(),
 		runners:            newRunnerCache(maxCachedRunners),
@@ -92,7 +99,7 @@ func (m *Manager) SetApp(app *application.App) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.wailsApp = app
-	m.toolDependenciesVersion++
+	m.appVersion++
 	m.runners.clear()
 }
 
@@ -116,86 +123,6 @@ func (m *Manager) App() *application.App {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.wailsApp
-}
-
-// SetSkillProvider stores the skill provider used by the Skill meta-tool.
-// It must be called before any chat messages are processed.
-func (m *Manager) SetSkillProvider(provider tools.SkillProvider) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.skillProvider = provider
-	m.toolDependenciesVersion++
-	m.runners.clear()
-}
-
-// SkillProvider returns the currently configured skill provider, or nil.
-func (m *Manager) SkillProvider() tools.SkillProvider {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.skillProvider
-}
-
-// SetAttentionRequester stores the notification-backed attention requester.
-func (m *Manager) SetAttentionRequester(requester tools.AttentionRequester) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.attention = requester
-	m.toolDependenciesVersion++
-	m.runners.clear()
-}
-
-// SetSkillCreator stores the persistence layer used by ProposeSkill.
-func (m *Manager) SetSkillCreator(creator tools.SkillCreator) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.skillCreator = creator
-	m.toolDependenciesVersion++
-	m.runners.clear()
-}
-
-// SetCliInstaller stores the CLI installer used by the InstallCli tool.
-func (m *Manager) SetCliInstaller(i tools.CliInstaller) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.cliInstaller = i
-	m.toolDependenciesVersion++
-	m.runners.clear()
-}
-
-// SetCliInstallProgressReporter stores the progress reporter used by task install flows.
-func (m *Manager) SetCliInstallProgressReporter(r tools.CliInstallProgressReporter) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.cliInstallProgress = r
-	m.toolDependenciesVersion++
-	m.runners.clear()
-}
-
-// SetCliManifestGenerator stores the manifest generator used by the GenerateCliManifest tool.
-func (m *Manager) SetCliManifestGenerator(g tools.CliManifestGenerator) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.cliManifestGenerator = g
-	m.toolDependenciesVersion++
-	m.runners.clear()
-}
-
-// SetCliCommandRunner stores the arbitrary CLI command runner used by the RunCliCommand tool.
-func (m *Manager) SetCliCommandRunner(r tools.CliCommandRunner) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.cliCommandRunner = r
-	m.toolDependenciesVersion++
-	m.runners.clear()
-}
-
-// SetTerminalRunner supplies the shared terminal service used by shell tools.
-func (m *Manager) SetTerminalRunner(r *pkgterminal.Manager) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.terminalRunner = r
-	m.toolDependenciesVersion++
-	m.runners.clear()
 }
 
 // SetToolConfirmDecider overrides the runtime approval decider used before tool execution.
@@ -285,7 +212,7 @@ func (m *Manager) runnerKey(cfg ModelConfig, enabledUserTools []string, sessionK
 	slices.Sort(names)
 	selection, _ := json.Marshal(names)
 	m.mu.RLock()
-	servicesVersion := m.toolDependenciesVersion
+	servicesVersion := m.appVersion
 	m.mu.RUnlock()
 	return fmt.Sprintf("provider:%d|cred:%s|model:%s|tools:%s|kind:%s|session:%d|catalog:%d|services:%d",
 		cfg.ProviderID, cfg.credentialFingerprint(), cfg.ModelName, selection, sessionKind, sessionID,

@@ -4,6 +4,9 @@ import "github.com/reatang/fire-poker/backend/pkg/i18n"
 
 type errorCode string
 
+// ErrorCode lets callers pass the Err* constants around, e.g. as a fallback in error mappers.
+type ErrorCode = errorCode
+
 func (e errorCode) Msg() string {
 	return i18n.TCurrent(string(e), nil)
 }
@@ -25,6 +28,20 @@ const (
 	ErrAgentAttachmentNotFound errorCode = "ierror.agent.attachment_not_found"
 	ErrAgentAttachmentSize     errorCode = "ierror.agent.attachment_too_large"
 	ErrAgentStreamError        errorCode = "ierror.agent.stream_error"
+	ErrAgentSaveOutput         errorCode = "ierror.agent.save_output"
+	ErrAgentSessionBusy        errorCode = "ierror.agent.session_busy"
+	ErrAgentPromptLocked       errorCode = "ierror.agent.system_prompt_locked"
+	ErrAgentToolsLocked        errorCode = "ierror.agent.session_tools_locked"
+	ErrAgentProviderUnavail    errorCode = "ierror.agent.provider_unavailable"
+	ErrAgentStopBeforePrompt   errorCode = "ierror.agent.stop_before_prompt"
+	ErrAgentPromptEmpty        errorCode = "ierror.agent.prompt_empty"
+	ErrAgentPromptNameTooLong  errorCode = "ierror.agent.prompt_name_too_long"
+	ErrAgentPromptInvalidName  errorCode = "ierror.agent.prompt_invalid_name"
+	ErrAgentPromptInvalid      errorCode = "ierror.agent.prompt_invalid"
+	ErrAgentPromptLibrary      errorCode = "ierror.agent.prompt_library"
+	ErrAgentUpdatePrompt       errorCode = "ierror.agent.update_prompt"
+	ErrAgentForkTarget         errorCode = "ierror.agent.fork_target"
+	ErrAgentFork               errorCode = "ierror.agent.fork"
 	ErrNotificationCreate      errorCode = "ierror.notification.create"
 	ErrNotificationList        errorCode = "ierror.notification.list"
 	ErrNotificationResolve     errorCode = "ierror.notification.resolve"

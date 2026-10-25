@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
+	"github.com/reatang/fire-poker/backend/pkg/i18n"
 	"gorm.io/gorm"
 )
 
@@ -32,7 +33,7 @@ func (s *Storage) ForkSession(sessionID, messageID uint) (*data_models.Session, 
 		if len(title) > 200 {
 			title = title[:200]
 		}
-		fork = data_models.Session{Title: string(title) + " · 分叉", Kind: "user", Status: "idle", Tags: "[]", SystemPrompt: source.SystemPrompt, PromptName: source.PromptName, ToolIDs: source.ToolIDs}
+		fork = data_models.Session{Title: string(title) + i18n.TCurrent("session.fork_title_suffix", nil), Kind: "user", Status: "idle", Tags: "[]", SystemPrompt: source.SystemPrompt, PromptName: source.PromptName, ToolIDs: source.ToolIDs}
 		if err := tx.Create(&fork).Error; err != nil {
 			return err
 		}

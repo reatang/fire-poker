@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +14,8 @@ import (
 	"time"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
+	pkgAgent "github.com/reatang/fire-poker/backend/pkg/agent"
+	"github.com/reatang/fire-poker/backend/pkg/i18n"
 	"github.com/reatang/fire-poker/backend/pkg/id/prompt_id"
 	"github.com/reatang/fire-poker/backend/pkg/ierror"
 	"github.com/reatang/fire-poker/backend/pkg/prompt"
@@ -345,5 +349,92 @@ func TestConvertAttachmentsNormalizesAndPasses(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Name != "hello.go" || got[0].Kind != "file" {
 		t.Fatalf("normalize failed: %+v", got)
+	}
+}
+
+// iErrorMsg extracts the localized message the frontend displays.
+func iErrorMsg(t *testing.T, err error) string {
+	t.Helper()
+	var iErr *ierror.IError
+	if !errors.As(err, &iErr) {
+		t.Fatalf("expected *ierror.IError, got %T: %v", err, err)
+	}
+	return iErr.Msg
+}
+
+// TestAgentErrorPrefersSpecificMessages proves known causes surface their own localized message.
+func TestAgentErrorPrefersSpecificMessages(t *testing.T) {
+	cases := []struct {
+		err  error
+		want ierror.ErrorCode
+	}{
+		{fmt.Errorf("resolve model: %w", pkgAgent.ErrProviderDisabled), ierror.ErrAgentProviderUnavail},
+		{pkgAgent.ErrSessionBusy, ierror.ErrAgentSessionBusy},
+		{storage.ErrSystemPromptLocked, ierror.ErrAgentPromptLocked},
+		{storage.ErrSessionToolsLocked, ierror.ErrAgentToolsLocked},
+		{errors.New("disk full"), ierror.ErrAgentSendMessage},
+	}
+	for _, tc := range cases {
+		if got := iErrorMsg(t, agentError(ierror.ErrAgentSendMessage, tc.err)); got != tc.want.Msg() {
+			t.Errorf("%v: msg = %q, want %q", tc.err, got, tc.want.Msg())
+		}
+	}
+}
+
+// TestSendMessageReportsUnavailableProvider replaces the generic "send failed" with the actual cause.
+func TestSendMessageReportsUnavailableProvider(t *testing.T) {
+	t.Setenv("FIRE_POKER_DATA_DIR", t.TempDir())
+	svc := NewAgent(newTestStorage(t))
+	created, err := svc.CreateSession(context.Background(), agent_dto.CreateSessionInput{})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	_, err = svc.SendMessage(context.Background(), agent_dto.SendMessageInput{SessionID: created.SessionID, Content: "hi", ProviderID: 404, ModelName: "m"})
+	if got := iErrorMsg(t, err); got != ierror.ErrAgentProviderUnavail.Msg() {
+		t.Fatalf("msg = %q, want provider-unavailable message", got)
+	}
+}
+
+// TestPromptAndForkErrorsAreLocalized covers service methods that previously returned bare Chinese errors.
+func TestPromptAndForkErrorsAreLocalized(t *testing.T) {
+	t.Setenv("FIRE_POKER_DATA_DIR", t.TempDir())
+	svc := NewAgent(newTestStorage(t))
+	created, err := svc.CreateSession(context.Background(), agent_dto.CreateSessionInput{})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	_, err = svc.UpdateSessionPrompt(context.Background(), agent_dto.UpdateSessionPromptInput{SessionID: created.SessionID, System: "  "})
+	if got := iErrorMsg(t, err); got != ierror.ErrAgentPromptEmpty.Msg() {
+		t.Fatalf("empty prompt msg = %q", got)
+	}
+	_, err = svc.UpdateSessionPrompt(context.Background(), agent_dto.UpdateSessionPromptInput{SessionID: created.SessionID, System: "role", Name: strings.Repeat("名", maxPromptNameRunes+1)})
+	if got := iErrorMsg(t, err); got != ierror.ErrAgentPromptNameTooLong.Msg() {
+		t.Fatalf("long name msg = %q", got)
+	}
+	_, err = svc.ForkSession(context.Background(), agent_dto.ForkSessionInput{SessionID: created.SessionID})
+	if got := iErrorMsg(t, err); got != ierror.ErrAgentForkTarget.Msg() {
+		t.Fatalf("fork target msg = %q", got)
+	}
+}
+
+// TestGetSessionPromptNamesFollowLocale keeps fallback prompt labels in the active language.
+func TestGetSessionPromptNamesFollowLocale(t *testing.T) {
+	t.Setenv("FIRE_POKER_DATA_DIR", t.TempDir())
+	i18n.SetCurrentLocale(i18n.LocaleEnUS)
+	t.Cleanup(func() { i18n.SetCurrentLocale(i18n.DefaultLocale) })
+	svc := NewAgent(newTestStorage(t))
+	created, err := svc.CreateSession(context.Background(), agent_dto.CreateSessionInput{})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	out, err := svc.GetSessionPrompt(context.Background(), agent_dto.SessionPromptInput{SessionID: created.SessionID})
+	if err != nil {
+		t.Fatalf("get prompt: %v", err)
+	}
+	if out.Name != "Default system prompt" {
+		t.Fatalf("expected English default label, got %q", out.Name)
 	}
 }

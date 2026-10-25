@@ -9,6 +9,46 @@ import type {} from "../github.com/wailsapp/wails/v3/internal/eventdata.js";
 import "../github.com/wailsapp/wails/v3/internal/eventcreate.js";
 
 /**
+ * Name of the custom event "agent:session:spawned".
+ */
+export const AgentSessionSpawned = "agent:session:spawned";
+
+/**
+ * Name of the custom event "agent:session:status".
+ */
+export const AgentSessionStatus = "agent:session:status";
+
+/**
+ * Name of the custom event "agent:stream:chunk".
+ */
+export const AgentStreamChunk = "agent:stream:chunk";
+
+/**
+ * Name of the custom event "agent:stream:confirm_request".
+ */
+export const AgentStreamConfirmRequest = "agent:stream:confirm_request";
+
+/**
+ * Name of the custom event "agent:stream:done".
+ */
+export const AgentStreamDone = "agent:stream:done";
+
+/**
+ * Name of the custom event "agent:stream:error".
+ */
+export const AgentStreamError = "agent:stream:error";
+
+/**
+ * Name of the custom event "agent:stream:tool_call".
+ */
+export const AgentStreamToolCall = "agent:stream:tool_call";
+
+/**
+ * Name of the custom event "agent:stream:tool_result".
+ */
+export const AgentStreamToolResult = "agent:stream:tool_result";
+
+/**
  * Name of the custom event "time".
  */
 export const Time = "time";

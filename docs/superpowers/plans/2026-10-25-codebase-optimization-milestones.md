@@ -29,7 +29,7 @@ cd frontend && npx tsc --noEmit && npx vitest run
 | M1 | 工具审批安全加固（主体已由 `296cedd` 完成） | P0 | M0 | 否 |
 | M2 | 凭据收敛与 runner 生命周期（已完成） | P1 | M0 | **是** |
 | M3 | 配置仓库与 SQLite 并发（已完成） | P1 | M1（同改 `lookupToolMeta`） | 否 |
-| M4 | 后端结构整理与 i18n | P2 | M2、M3 | 是（事件类型） |
+| M4 | 后端结构整理与 i18n（已完成） | P2 | M2、M3 | 是（事件类型） |
 | M5 | 前端结构整理 | P2 | M2（同改 `chatStore`） | 否 |
 | M6 | 静态检查进 CI | P3 | M4、M5 | 否 |
 
@@ -224,32 +224,51 @@ M1 与 M2 改动的文件基本不重叠，可以并行；M5 可以在 M2 合并
 
 ## M4：后端结构整理与 i18n（P2）
 
-纯重构为主，行为保持不变。
+> **状态：已完成**（2026-10-25，开始前已合并 master 的 PR #4）。实际实现与原计划的差异见各任务下的“实现说明”。
 
 ### Task 4.1 Manager 依赖改为构造注入
 
-- [ ] 用一个 `ManagerDeps` 结构体在 `NewManager` 一次性注入 8 个依赖，删除对应 setter 及 `toolDependenciesVersion` 的递增逻辑（`SetApp` 视 Wails 生命周期保留）。
-- [ ] `agentSvc.NewAgent(stor, deps ...Dependencies)` 改为普通参数。
-- [ ] 测试辅助函数同步调整（`newTestXxx` 模式）。
+- [x] 新增 `ManagerDeps`，通过 `NewManagerWithDeps(stor, deps)` 在构造时一次性注入 8 个依赖，删除 8 个 setter 和没有调用方的 `SkillProvider()` getter。依赖构造后不再变化，工具工厂读取时无需加锁。
+- [x] `toolDependenciesVersion` 改名为 `appVersion`，只在 `SetApp` 时递增（Wails 应用句柄仍在 `ServiceStartup` 时注入）。
+- [x] `agentSvc.Dependencies` 改为 `pkgAgent.ManagerDeps` 的类型别名，`NewAgent(stor, deps ...)` 拆成 `NewAgent(stor)` 和 `NewAgentWithDeps(stor, deps)`，原来 30 行逐个判空调用 setter 的代码随之删除。
+- [x] 测试：原“替换服务后 runner 失效”的测试改为验证 `SetApp`；新增“注入依赖后对应工具可用”的测试。
+- 实现说明：保留 `NewManager(stor)` 作为不带依赖的构造函数（沿用 M3 里 `NewPluginWithStorage` 的写法），约 70 处测试调用无需改动。
 
 ### Task 4.2 拆分 `ChatHandler.SendMessage`
 
-- [ ] 拆成 `prepareTurn`（重新生成、历史加载）、`resolveSystemPrompt`（锁定与默认值）、`persistUserMessage`、`startRun`（runner、事件消费、清理）。
-- [ ] 合并重复的 `CountMessagesForSession` 查询。
-- [ ] 现有 `chat_handler_test.go`、`regenerate_test.go`、`resume_test.go` 不改断言即可通过。
+- [x] 拆成 `prepareTurn`（解析凭据、重新生成、加载历史，全程只读）、`resolveSessionPrompt`（工具选择和系统提示词的锁定与默认值）、`persistUserMessage`、`startRun`（runner、事件消费、清理）。主函数只负责编排顺序和释放流占用。
+- [x] 两次 `CountMessagesForSession` 合并为一次，并且在“没有指定提示词且会话已有提示词”的常见路径上直接跳过查询。已逐个分支核对与原逻辑等价：两次计数之间没有任何写消息的操作。
+- [x] 现有测试一个断言都没改，全部通过（`-count=3` 和 `-race` 均通过）。
 
 ### Task 4.3 硬编码中文改为错误码/i18n
 
-- [ ] `storage/session.go:58`、`storage/session_tools.go:13` 改为 `ierror` 错误码，前端按码翻译。
-- [ ] `storage/fork.go` 的“ · 分叉”、`storage/default_prompt.go` 与 `chat_handler.go` 的“默认系统提示词”/“自定义系统提示词”改为通过 `i18n.TCurrent` 取值，或改存稳定 key、前端展示时翻译。
-- [ ] `i18n/resources_*` 与前端 `locales` 同步补充文案。
+- [x] storage / pkg 层改为英文哨兵错误：`storage.ErrSystemPromptLocked`（新增）、`storage.ErrSessionToolsLocked`、`agent.ErrSessionBusy`（新增，`TryStart` 和 `WhileInactive` 共用）、`systemprompt.ErrInvalidName` / `ErrInvalidContent`。
+- [x] service 层新增 `agentError(fallback, err)`：用 `errors.Is` 把已知原因映射为专门的错误码，这样提示文字本身就是本地化后的具体原因，而不是“发送消息失败”再附一句英文。顺带补上了 M2 留下的“provider 不存在或已停用”提示。
+- [x] `system_prompt.go`、`fork.go` 的公开方法改为全部返回 `ierror`（原来直接返回中文 `fmt.Errorf`，违反项目规则）。
+- [x] 写入数据库的标签（`prompt_name` 默认值和自定义值、分叉会话标题的后缀）改为按当前语言调用 `i18n.TCurrent` 取值，key 定义为 `storage.PromptNameDefaultKey` / `PromptNameCustomKey`。历史数据不受影响。
+- [x] 新增 15 个错误码和 3 个标签的中英文文案；新增 `i18n_test.go`，检查两种语言的 key 集合完全一致。
+- [x] 测试：错误映射；无效 provider 时提示具体原因；提示词为空、名称过长、分叉目标无效时返回本地化提示；英文环境下默认提示词名称和分叉后缀为英文。
+- 实现说明：
+  - `chat_handler.go` 中“工具执行已中断……”这句是写进对话历史、发给模型看的，不是给用户看的，保持不动。
+  - `service/config` 里的语言名称（如“简体中文”）本来就该显示原文，保持不动。
+  - 这次没有改前端 `locales`：后端文案在后端翻译，前端直接显示 `msg`。
 
 ### Task 4.4 事件类型化
 
-- [ ] 对 `agent:stream:*`、`agent:session:*` 等事件使用 `application.RegisterEvent[T]` 注册载荷类型。
-- [ ] 重新生成绑定，前端改为引用 `bindings/events` 导出的事件名常量与类型，去掉字符串字面量。
+- [x] 新增 `backend/pkg/agent/events.go`：8 个对话事件（`agent:session:status/spawned`、`agent:stream:chunk/tool_call/tool_result/confirm_request/done/error`）的载荷结构体、`RegisterEvent` 注册，以及每个事件一个发送函数。11 个原来直接发送 `map` 的地方全部改为调用这些函数；`ChatHandler` 和 `Manager` 里重复的 `updateSessionStatus` 合并为一个。
+- [x] **风险控制**：Wails 遇到类型不匹配的载荷时会直接取消这次事件，漏改一处就会导致对话界面收不到消息。为此新增两个测试：
+  - 结构性测试：扫描后端源码，只要在 `events.go` 之外直接引用这 8 个事件名就失败（迁移前它正确列出了全部 11 处）；
+  - 格式测试：锁定每个载荷序列化后的 JSON，与原来 map 的格式逐字一致，前端解析逻辑不受影响。
+- [x] 重新生成绑定；`chatStore` 的 8 个监听改用 `bindings/events` 导出的常量。生成的类型声明让 TS 在编译期就知道每个事件的数据类型；`contentType`、`status` 这两个字段在 Go 里是普通 string，在回调边界处收窄为前端的联合类型。
+- [x] 3 个前端测试的 `@wailsio/runtime` mock 改为 `importOriginal` 加覆盖 `Events`（项目其他测试已在用这种写法），因为生成的事件绑定会在导入时调用真实的 `Create` 工具函数。
+- 实现说明：只做了计划里的 8 个对话事件。`cli.install.*`、`cli.login.*`、`runtime.node.progress`、`terminal.*`、`notification.*`、`quick_chat:*` 等约 12 个事件仍未注册，列为后续项。
 
-**验收：** `main.go` 中 agent 相关组装更短；后端无面向用户的硬编码中文（注释除外）。
+**验收：** ✅ `main.go` 中 agent 的组装由逐个调用 setter 改为一次构造；后端已没有面向用户的硬编码中文（发给模型的提示和语言名称除外）；`wails3 task check` 通过（vitest 40 个文件、199 个用例；Go 31 个包）。
+
+**后续项（未包含在 M4 内）：**
+- [ ] 手动验证：在打包后的应用里完整跑一轮对话（流式输出、工具调用和审批、停止、重新生成、生成标题、后台任务会话），确认 8 个事件都能正常到达前端；切换到英文后，分别触发系统提示词已锁定、provider 已停用、分叉这几种情况，确认提示文字和标签都是英文。
+- [ ] 其余约 12 个事件按同样方式注册类型。
+- [ ] **前端还有大量硬编码中文**（`SystemPromptSettings.tsx`、`MessageActions.tsx` 里的 `zh ? … : …` 内联三元、`chatStore.ts` 里抛出的错误文本等），没有走 i18n，建议并入 M5。
 
 ---
 

@@ -1,7 +1,8 @@
 package storage
 
 import (
-	"fmt"
+	"errors"
+
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	"gorm.io/gorm"
 )
@@ -47,6 +48,10 @@ func (s *Storage) UpdateSessionTitle(id uint, title string) error {
 	return s.sqliteDB.Model(&data_models.Session{}).Where("id = ?", id).Update("title", title).Error
 }
 
+// ErrSystemPromptLocked indicates that the conversation's system prompt is immutable once a message exists.
+var ErrSystemPromptLocked = errors.New("system prompt is locked after the conversation started")
+
+// UpdateSessionPrompt changes the prompt only while the session has no messages.
 func (s *Storage) UpdateSessionPrompt(id uint, system, name string) error {
 	result := s.sqliteDB.Model(&data_models.Session{}).Where("id = ?", id).
 		Where("NOT EXISTS (SELECT 1 FROM messages WHERE messages.session_id = ?)", id).
@@ -55,7 +60,7 @@ func (s *Storage) UpdateSessionPrompt(id uint, system, name string) error {
 		return result.Error
 	}
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("已开始聊天的对话不能更换系统提示词，请新建对话")
+		return ErrSystemPromptLocked
 	}
 	return nil
 }

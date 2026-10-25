@@ -26,6 +26,9 @@ export function DeleteSession(input: agent_dto$0.DeleteSessionInput): $Cancellab
     });
 }
 
+/**
+ * ForkSession copies the conversation up to a saved message into a new session.
+ */
 export function ForkSession(input: agent_dto$0.ForkSessionInput): $CancellablePromise<agent_dto$0.ForkSessionOutput | null> {
     return $Call.ByID(2594848883, input).then(($result: any) => {
         return $$createType5($result);
@@ -41,6 +44,9 @@ export function GenerateTitle(input: agent_dto$0.GenerateTitleInput): $Cancellab
     });
 }
 
+/**
+ * GetSessionPrompt returns the session's effective system prompt and whether it is locked.
+ */
 export function GetSessionPrompt(input: agent_dto$0.SessionPromptInput): $CancellablePromise<agent_dto$0.SessionPromptOutput | null> {
     return $Call.ByID(3344611327, input).then(($result: any) => {
         return $$createType9($result);
@@ -56,6 +62,9 @@ export function GetSessionToolSettings(input: agent_dto$0.SessionToolsInput): $C
     });
 }
 
+/**
+ * GetSystemPrompt loads one prompt from the library.
+ */
 export function GetSystemPrompt(input: agent_dto$0.PromptLibraryInput): $CancellablePromise<agent_dto$0.PromptOutput | null> {
     return $Call.ByID(3285440076, input).then(($result: any) => {
         return $$createType13($result);
@@ -68,6 +77,9 @@ export function ListSessions(input: agent_dto$0.ListSessionsInput): $Cancellable
     });
 }
 
+/**
+ * ListSystemPrompts returns the names saved in the prompt library.
+ */
 export function ListSystemPrompts(): $CancellablePromise<agent_dto$0.PromptLibraryOutput | null> {
     return $Call.ByID(3618110735).then(($result: any) => {
         return $$createType17($result);
@@ -107,6 +119,9 @@ export function SaveSessionToolSettings(input: agent_dto$0.SaveSessionToolsInput
     });
 }
 
+/**
+ * SaveSystemPrompt stores a non-empty prompt in the library under a validated name.
+ */
 export function SaveSystemPrompt(input: agent_dto$0.PromptLibraryInput): $CancellablePromise<agent_dto$0.PromptOutput | null> {
     return $Call.ByID(2607392455, input).then(($result: any) => {
         return $$createType13($result);
@@ -140,6 +155,9 @@ export function ToggleStarSession(input: agent_dto$0.ToggleStarSessionInput): $C
     });
 }
 
+/**
+ * UpdateSessionPrompt sets or resets the prompt of a session that has not started yet.
+ */
 export function UpdateSessionPrompt(input: agent_dto$0.UpdateSessionPromptInput): $CancellablePromise<agent_dto$0.SessionPromptOutput | null> {
     return $Call.ByID(3794724022, input).then(($result: any) => {
         return $$createType9($result);
