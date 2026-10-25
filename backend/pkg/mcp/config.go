@@ -4,12 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
-	"strconv"
-	"strings"
 	"time"
 
 	toolmcp "trpc.group/trpc-go/trpc-agent-go/tool/mcp"
+	mcpgo "trpc.group/trpc-go/trpc-mcp-go"
 )
 
 // ServerConfig is the persisted MCP server connection config used by this app.
@@ -64,44 +62,39 @@ func loadServerConfig(configPath string) (ServerConfig, error) {
 	return ServerConfig{}, fmt.Errorf("invalid mcp config: no server definition found")
 }
 
-// toToolSetConfig converts the local config structure to the trpc-agent-go MCP config.
-func (c ServerConfig) toToolSetConfig() toolmcp.ConnectionConfig {
-	command := c.Command
-	args := append([]string(nil), c.Args...)
+// stdioTransportConfig converts a local stdio server config into trpc-mcp-go process
+// parameters. Env and working directory are applied to the process directly, so no
+// shell is involved and the same config works on Windows.
+func (c ServerConfig) stdioTransportConfig() mcpgo.StdioTransportConfig {
 	timeout := c.Timeout
-
-	if c.Transport == "stdio" && timeout <= 0 {
+	if timeout <= 0 {
 		timeout = defaultStdioTimeout
 	}
 
-	// trpc-agent-go v0.4.0 does not expose stdio env/working_dir on ConnectionConfig,
-	// so flatten env into a shell invocation for local stdio MCP servers.
-	if c.Transport == "stdio" && (len(c.Env) > 0 || c.WorkingDir != "") {
-		parts := []string{}
-		if c.WorkingDir != "" {
-			parts = append(parts, "cd "+strconv.Quote(c.WorkingDir), "&&")
+	var env map[string]string
+	if len(c.Env) > 0 {
+		env = make(map[string]string, len(c.Env))
+		for key, value := range c.Env {
+			env[key] = value
 		}
-		envKeys := make([]string, 0, len(c.Env))
-		for key := range c.Env {
-			envKeys = append(envKeys, key)
-		}
-		sort.Strings(envKeys)
-		for _, key := range envKeys {
-			parts = append(parts, key+"="+strconv.Quote(c.Env[key]))
-		}
-		parts = append(parts, strconv.Quote(command))
-		for _, arg := range args {
-			parts = append(parts, strconv.Quote(arg))
-		}
-		command = "sh"
-		args = []string{"-c", strings.Join(parts, " ")}
 	}
 
+	return mcpgo.StdioTransportConfig{
+		ServerParams: mcpgo.StdioServerParameters{
+			Command:    c.Command,
+			Args:       append([]string(nil), c.Args...),
+			Env:        env,
+			WorkingDir: c.WorkingDir,
+		},
+		Timeout: timeout,
+	}
+}
+
+// toToolSetConfig converts a remote (SSE/streamable) server config to the trpc-agent-go MCP config.
+func (c ServerConfig) toToolSetConfig() toolmcp.ConnectionConfig {
 	return toolmcp.ConnectionConfig{
 		Transport:   c.Transport,
-		Command:     command,
-		Args:        args,
-		Timeout:     timeout,
+		Timeout:     c.Timeout,
 		ServerURL:   c.ServerURL,
 		Headers:     c.Headers,
 		Description: c.Description,
