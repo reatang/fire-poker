@@ -54,3 +54,12 @@ export function isImageMime(mime: string): boolean {
 export function isPdfMime(mime: string): boolean {
   return mime === 'application/pdf'
 }
+
+// blobToBase64 encodes pasted clipboard images for the temp-file API.
+export async function blobToBase64(blob: Blob): Promise<string> {
+  const buf = await blob.arrayBuffer()
+  const bytes = new Uint8Array(buf)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i])
+  return btoa(binary)
+}

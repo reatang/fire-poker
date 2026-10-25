@@ -30,7 +30,7 @@ cd frontend && npx tsc --noEmit && npx vitest run
 | M2 | 凭据收敛与 runner 生命周期（已完成） | P1 | M0 | **是** |
 | M3 | 配置仓库与 SQLite 并发（已完成） | P1 | M1（同改 `lookupToolMeta`） | 否 |
 | M4 | 后端结构整理与 i18n（已完成） | P2 | M2、M3 | 是（事件类型） |
-| M5 | 前端结构整理 | P2 | M2（同改 `chatStore`） | 否 |
+| M5 | 前端结构整理与国际化（已完成） | P2 | M2（同改 `chatStore`） | 否 |
 | M6 | 静态检查进 CI | P3 | M4、M5 | 否 |
 
 M1 与 M2 改动的文件基本不重叠，可以并行；M5 可以在 M2 合并后与 M3/M4 并行。
@@ -272,25 +272,47 @@ M1 与 M2 改动的文件基本不重叠，可以并行；M5 可以在 M2 合并
 
 ---
 
-## M5：前端结构整理（P2）
+> **状态：已完成**（2026-10-26），并入了 M4 记录的“前端硬编码中文国际化”。三个大文件的拆分都是用脚本按行号原样搬移代码，并且先断言边界行的内容，任何一处不符就中止、不写文件；拆完后再逐行比对，确认除有意的改动外原代码都保留了下来。
 
-### Task 5.1 拆分 `chatStore.ts`（1094 行）
+### Task 5.0 前端硬编码中文改为 i18n（M4 后续项）
 
-- [ ] 按 zustand slice 拆为 `sessionSlice`（会话增删改查）、`streamSlice`（流式缓冲与逐帧合并）、`titleSlice`（标题生成），事件订阅移到 `store/chatEvents.ts`。
-- [ ] `chatStore.test.ts`、`chatPerformance.test.tsx` 保持通过。
+- [x] `SystemPromptSettings.tsx`（28 处）、`MessageActions.tsx`（原来是 `zh ? … : …` 内联三元）、`chatStore` 抛出的 6 个错误、`MessageItem` 的中断/失败提示，以及侧边栏折叠/展开、设置页“返回”、模型选择按钮的 title，全部改为 i18n key。中文文案与原来逐字一致，现有测试里断言中文的地方不受影响。
+- [x] `utils.ts` 的日期：“10月25日 / Oct 25”改用 `Intl.DateTimeFormat` 生成（已核对与原来手写的格式逐字一致），“今天 / 昨天”改为带插值的 key，会话分组标题复用 `sidebar.*` 里已有的 key。
+- [x] 附带修复：`SystemPromptSettings` 和 `MessageActions` 原来直接显示 `e.message`，后端返回的错误会显示成一段原始 JSON；现在改用 `parseUnknownIError` 只显示本地化后的 `msg`。
+- [x] 删除没有任何引用的 `src/mock/data.ts`。
+- [x] 新增 `localeKeys.test.ts`，检查中英文 locale 的 key 集合完全一致；给 `formatTimestamp`、`groupConversationsByDate` 补测试，覆盖两种语言下的今天、昨天、同年、跨年四种情况。
+- 保留的中文：`ErrorMessageBubble` 里用来匹配后端两种语言返回值的字符串；`useSettingsBootstrap` 里后端数据加载前的占位值（语言名“简体中文”、地区名）。
+
+### Task 5.1 拆分 `chatStore.ts`（1076 行）
+
+- [x] 拆为 `store/chat/` 下的 6 个文件：`types.ts`、`helpers.ts`、`streamingBuffer.ts`（流式缓冲与逐帧合并，做成工厂函数供各模块共享）、`sessionSlice.ts`（会话列表、工具选择、消息加载）、`turnSlice.ts`（发送、重新生成、停止、审批、标题）、`chatEvents.ts`（8 个事件监听）。`store/chatStore.ts` 只剩 19 行的组装代码，`useChatStore` 的导入路径不变。
+- [x] 各模块的返回类型用 `Pick` / `Omit` 从 `ChatStore` 精确推出，组装时 TS 会检查字段是否齐全。
+- [x] 逐行比对：原文件中只有 17 行不是原样保留，全部是有意改动（加 `export`、替换外层 `create(...)` 包装、事件方法头改为工厂函数）。
+- [x] `chatStore.test.ts`（29 个用例）、`chatPerformance.test.tsx` 断言未改，全部通过。
+- 实现说明：没有按原计划拆出单独的 `titleSlice`。标题生成和发送共用 `pendingTitleGenerations` / `sessionRunConfigs`，并入 `turnSlice` 更内聚。
 
 ### Task 5.2 多窗口入口
 
-- [ ] `App.tsx` 改为 `entry → Component` 映射表，配合 `React.lazy` + `Suspense` 按窗口拆包。
-- [ ] 对比改造前后 `vite build` 主 chunk 体积，写进 PR 描述。
+- [x] `App.tsx` 改为 `ENTRIES` 映射表，每个窗口入口（含引导页和主界面）都用 `React.lazy` 按需加载，外层包一个 `Suspense`。
+- [x] 体积对比：主 chunk `index-*.js` 从 **1,505 KB（gzip 463 KB）降到 291 KB（gzip 96 KB）**。各窗口现在只加载自己的 chunk：快速对话 5 KB、添加 provider 5 KB、设置页 107 KB、主界面 45 KB 加对话区。原来构建时报的 `INEFFECTIVE_DYNAMIC_IMPORT` 警告也消失了。
+- [x] `onboardingApp.test.tsx` 的首次断言从 `getByText` 改为 `await findByText`：入口改为按需加载后，首帧渲染本来就是异步的。这是本里程碑唯一一处测试断言的改动。
 
 ### Task 5.3 大组件拆分
 
-- [ ] `ChatInput.tsx`（801 行）：编辑器初始化、附件、工具选择、快捷键提取为 hooks/子组件。
-- [ ] `SettingsApp.tsx`（717 行）：各设置面板的状态与路由拆分。
-- [ ] 对应组件测试保持通过。
+- [x] `ChatInput.tsx` 从 801 行降到 457 行。拆出 `chat/input/editorExtensions.ts`（两个 tiptap 扩展和代码块转换，原样搬移）、`ToolSelector.tsx`、`ModelSelector.tsx`（纯展示组件，状态和回调由 `ChatInput` 传入，处理逻辑不变）、`useComposerAttachments.ts`（附件状态、选择文件、粘贴、浏览器拖放和 macOS 原生拖放）；`blobToBase64` 移到 `lib/attachments.ts`。
+- [x] `SettingsApp.tsx` 从 717 行降到 227 行。拆出：
+  - `usePluginSettings`：插件页的状态和 12 个处理函数。它在 `SettingsApp` 顶层**无条件调用**，所以切换标签页时状态不丢失，窗口卸载时仍会取消进行中的 CLI 登录（如果把状态移进插件页组件，切换标签就会误取消登录）。
+  - `PluginsSettingsSection`：插件页的 JSX。
+  - `useRuntimeDownloadReminder(active)`：运行时下载提醒、进度提示的两个 effect 和相关格式化函数。
+- [x] 逐行比对两个文件的拆分结果，未原样保留的行全部是 props 改名、回调转移、import 调整和 `export`。
+- [x] 对应组件测试（`chatInputTools`、`chatInputAttachments`、`pluginSettings`、`settingsApp`）断言未改，全部通过。
 
-**验收：** 单文件不超过约 400 行；行为测试无断言修改。
+**验收：** ✅ `wails3 task check` 通过（vitest 41 个文件、202 个用例；Go 31 个包）。拆分过的文件都降到 400 行左右以内，只有 `ChatInput.tsx` 还有 457 行，剩下的主要是编辑器初始化和数据加载的 effect。除 Task 5.2 说明的那一处外，测试断言均未修改。
+
+**后续项（未包含在 M5 内）：**
+- [ ] 手动验证：在打包后的应用里分别打开主界面、设置、快速对话、添加 provider / Skill / 记忆这几个窗口，确认按需加载都正常；切到英文后检查系统提示词设置弹窗、消息操作按钮、时间戳和会话分组标题；在设置页插件标签发起 CLI 登录后切换到其他标签再切回，确认登录没有被中断。
+- [ ] 对话区 chunk `ChatArea-*.js` 仍有 937 KB（gzip 303 KB），主要来自 `rehype-highlight` 默认引入的 highlight.js 全量语言包，以及 tiptap 编辑器。可以改为只注册常用语言，或把代码高亮再拆成异步加载的 chunk。
+- [ ] `useSettingsBootstrap` 里的地区名（“中国 / 美国”）是后端 `service/config` 返回值加载前的占位，后端返回的地区列表本身也只有中文，需要前后端一起本地化。
 
 ---
 

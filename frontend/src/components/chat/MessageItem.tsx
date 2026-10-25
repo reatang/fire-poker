@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -57,6 +58,7 @@ export const MessageItem = memo(function MessageItem({
   onReject,
   onSubmitComment,
 }: Props) {
+  const { t } = useTranslation()
   const { role, contentType, content, modelName, tokensIn, tokensOut, extra } = message
   const openAttachment = (path: string) => {
     void FileBinding.OpenFile({ path })
@@ -268,8 +270,8 @@ export const MessageItem = memo(function MessageItem({
         </div>
       )}
 
-      {!isStreaming && extra === 'interrupted' && <p className="mt-2 text-xs text-muted-foreground">已中断 · 内容已保存，可发送“继续”接着生成</p>}
-      {!isStreaming && extra === 'incomplete' && <p className="mt-2 text-xs text-muted-foreground">生成失败 · 已保留部分内容</p>}
+      {!isStreaming && extra === 'interrupted' && <p className="mt-2 text-xs text-muted-foreground">{t('chat.interruptedNote')}</p>}
+      {!isStreaming && extra === 'incomplete' && <p className="mt-2 text-xs text-muted-foreground">{t('chat.incompleteNote')}</p>}
       {pendingConfirm && onConfirm && onReject && onSubmitComment && (
         <ToolConfirmCard
           toolName={pendingConfirm.toolName}

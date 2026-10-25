@@ -181,7 +181,7 @@ export function ChatHeader({
       {sidebarCollapsed && (
         <button
           type="button"
-          aria-label="展开侧边栏"
+          aria-label={t('sidebar.expand')}
           onClick={onExpandSidebar}
           className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >

@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
+import i18n from '../i18n'
 import type { Message, Conversation, DisplayMessage } from '../types'
 
 export function cn(...inputs: ClassValue[]) {
@@ -30,27 +31,24 @@ export function formatTimestamp(dateValue: string | Date, language: string): str
   const yesterday = new Date(today.getTime() - 86400000)
   const msgDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
 
-  const timeStr = date.toLocaleTimeString(language === 'zh-CN' ? 'zh-CN' : 'en-US', {
+  // Intl renders "10月25日" / "Oct 25" itself, so only the relative labels need translations.
+  const locale = language === 'zh-CN' ? 'zh-CN' : 'en-US'
+  const timeStr = date.toLocaleTimeString(locale, {
     hour: '2-digit',
     minute: '2-digit',
   })
 
-  const isZh = language === 'zh-CN'
-
   if (msgDay.getTime() === today.getTime()) {
-    return isZh ? `今天 ${timeStr}` : `Today ${timeStr}`
+    return i18n.t('time.todayAt', { lng: language, time: timeStr })
   }
   if (msgDay.getTime() === yesterday.getTime()) {
-    return isZh ? `昨天 ${timeStr}` : `Yesterday ${timeStr}`
+    return i18n.t('time.yesterdayAt', { lng: language, time: timeStr })
   }
-  if (date.getFullYear() === now.getFullYear()) {
-    return isZh
-      ? `${date.getMonth() + 1}月${date.getDate()}日 ${timeStr}`
-      : `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ${timeStr}`
-  }
-  return isZh
-    ? `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${timeStr}`
-    : `${date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} ${timeStr}`
+  const sameYear = date.getFullYear() === now.getFullYear()
+  const day = date.toLocaleDateString(locale, sameYear
+    ? { month: 'short', day: 'numeric' }
+    : { year: 'numeric', month: 'short', day: 'numeric' })
+  return `${day} ${timeStr}`
 }
 
 const CONTENT_TYPE_PRIORITY: Record<string, number> = {
@@ -195,9 +193,12 @@ export function groupConversationsByDate(
     else groups.earlier.push(conv)
   }
 
-  const labels = language === 'zh-CN'
-    ? { today: '今天', yesterday: '昨天', week: '过去7天', earlier: '更久以前' }
-    : { today: 'Today', yesterday: 'Yesterday', week: 'Last 7 days', earlier: 'Earlier' }
+  const labels = {
+    today: i18n.t('sidebar.today', { lng: language }),
+    yesterday: i18n.t('sidebar.yesterday', { lng: language }),
+    week: i18n.t('sidebar.last7days', { lng: language }),
+    earlier: i18n.t('sidebar.earlier', { lng: language }),
+  }
 
   return Object.entries(groups)
     .filter(([, items]) => items.length > 0)
