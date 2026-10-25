@@ -2,9 +2,8 @@ package settings
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"path/filepath"
+	"runtime"
 
 	"github.com/reatang/fire-poker/backend/models/view_model"
 	"github.com/reatang/fire-poker/backend/pkg/agent/toolkit"
@@ -130,39 +129,18 @@ func (s *Settings) SaveShortcutSettings(ctx context.Context, input settings_dto.
 	}, nil
 }
 
-// ApplyFileSettings migrates config and database artifacts into a new data directory and updates the locator file.
-func (s *Settings) ApplyFileSettings(ctx context.Context, input settings_dto.ApplyFileSettingsInput) (*settings_dto.ApplyFileSettingsOutput, error) {
-	sourceDir, err := dir.GetDataDir()
+// ListDataDirectories returns every location the app stores data in, for read-only display in data management.
+func (s *Settings) ListDataDirectories(ctx context.Context, input settings_dto.ListDataDirectoriesInput) (*settings_dto.ListDataDirectoriesOutput, error) {
+	dataDir, err := dir.GetDataDir()
 	if err != nil {
-		return nil, ierror.Error(ierror.ErrSettingsLoadConfig, err)
+		return nil, ierror.Error(ierror.ErrSettingsListDataDirs, err)
 	}
-	if input.TargetDir == "" {
-		return nil, ierror.Error(ierror.ErrSettingsTargetDir, fmt.Errorf("target data dir is required"))
+	items := buildDataDirectoryItems(dataDir, runtime.GOOS, dir.HomeDir(), dir.TempRoot())
+	for i := range items {
+		_, statErr := os.Stat(items[i].Path)
+		items[i].Exists = statErr == nil
 	}
-	if err := os.MkdirAll(input.TargetDir, 0o755); err != nil {
-		return nil, ierror.Error(ierror.ErrSettingsCreateDir, err)
-	}
-	if err := os.MkdirAll(filepath.Join(input.TargetDir, "logs"), 0o755); err != nil {
-		return nil, ierror.Error(ierror.ErrSettingsCreateDir, err)
-	}
-
-	config, err := s.loadConfig()
-	if err != nil {
-		return nil, ierror.Error(ierror.ErrSettingsLoadConfig, err)
-	}
-	config.DataDir = input.TargetDir
-
-	if err := copyFile(filepath.Join(sourceDir, dir.DataBaseFileName), filepath.Join(input.TargetDir, dir.DataBaseFileName)); err != nil && !os.IsNotExist(err) {
-		return nil, ierror.Error(ierror.ErrSettingsCopyFile, err)
-	}
-	if err := s.saveConfigToDir(input.TargetDir, config); err != nil {
-		return nil, ierror.Error(ierror.ErrSettingsSaveConfig, err)
-	}
-	if err := dir.WriteLocatorDataDir(input.TargetDir); err != nil {
-		return nil, ierror.Error(ierror.ErrSettingsWriteLocator, err)
-	}
-
-	return &settings_dto.ApplyFileSettingsOutput{}, nil
+	return &settings_dto.ListDataDirectoriesOutput{Items: items}, nil
 }
 
 // SaveLocaleSettings updates locale and language in the persisted config file.

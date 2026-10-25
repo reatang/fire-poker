@@ -82,6 +82,24 @@ Settings are organized around real product surfaces: general preferences, model 
 - Linux
 - Experimental iOS and Android build scaffolding
 
+## Data Location
+
+On every platform Fire Poker keeps its data in `~/.fire-poker` under your home directory (`%USERPROFILE%\.fire-poker` on Windows). The full paths are also listed in **Settings → Data**, where each one can be opened directly.
+
+| Location | Contents |
+| --- | --- |
+| `config.json` | App settings and extension list |
+| `data.db` | Providers, conversations, messages, memories |
+| `skills/` | User Skills |
+| `plugins/` | MCP servers, plugins, CLI tools and their data |
+| `logs/` | Daily runtime logs, kept for 14 days |
+| `cache/` | Node runtime and Windows WebView2 data; safe to delete |
+
+- Back up or move: quit the app and copy the whole `~/.fire-poker` folder.
+- Remove completely: delete `~/.fire-poker`; on macOS also delete `~/Library/WebKit/com.reatang.fire-poker` and `~/Library/Caches/com.reatang.fire-poker`.
+- Custom location: set the `FIRE_POKER_DATA_DIR` environment variable, which the Windows portable build uses.
+- Development builds (`wails3 dev` and other builds without the `production` tag) use a separate `~/.fire-poker-dev`, so they never touch release data.
+
 ## Tech Stack
 
 - Desktop framework: Wails 3

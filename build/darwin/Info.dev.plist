@@ -9,7 +9,7 @@
 	<key>CFBundleExecutable</key>
 	<string>fire-poker</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.reatang.fire-poker</string>
+	<string>com.reatang.fire-poker.dev</string>
 	<key>CFBundleVersion</key>
 	<string>0.4.2</string>
 	<key>CFBundleGetInfoString</key>

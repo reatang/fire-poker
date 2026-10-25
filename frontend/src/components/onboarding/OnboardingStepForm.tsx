@@ -20,7 +20,7 @@ export function OnboardingStepForm(props: Props) {
 				</p>
 			</div>
 
-			<div className="min-h-0 flex-1 overflow-hidden">
+			<div className="flex min-h-0 flex-1 flex-col">
 				<AddProviderStepForm
 					provider={props.provider}
 					mode="onboarding"

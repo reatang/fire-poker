@@ -15,10 +15,10 @@ import { Call as $Call, CancellablePromise as $CancellablePromise, Create as $Cr
 import * as settings_dto$0 from "./settings_dto/models.js";
 
 /**
- * ApplyFileSettings migrates config and database artifacts into a new data directory and updates the locator file.
+ * ListDataDirectories returns every location the app stores data in, for read-only display in data management.
  */
-export function ApplyFileSettings(input: settings_dto$0.ApplyFileSettingsInput): $CancellablePromise<settings_dto$0.ApplyFileSettingsOutput | null> {
-    return $Call.ByID(217169158, input).then(($result: any) => {
+export function ListDataDirectories(input: settings_dto$0.ListDataDirectoriesInput): $CancellablePromise<settings_dto$0.ListDataDirectoriesOutput | null> {
+    return $Call.ByID(3415589562, input).then(($result: any) => {
         return $$createType1($result);
     });
 }
@@ -78,7 +78,7 @@ export function ValidateShortcutSettings(input: settings_dto$0.ValidateShortcutS
 }
 
 // Private type creation functions
-const $$createType0 = settings_dto$0.ApplyFileSettingsOutput.createFrom;
+const $$createType0 = settings_dto$0.ListDataDirectoriesOutput.createFrom;
 const $$createType1 = $Create.Nullable($$createType0);
 const $$createType2 = settings_dto$0.LoadBootstrapOutput.createFrom;
 const $$createType3 = $Create.Nullable($$createType2);

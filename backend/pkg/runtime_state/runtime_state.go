@@ -24,19 +24,17 @@ type StateSnapshot struct {
 const (
 	// StateMissing indicates the runtime has not been downloaded yet.
 	StateMissing = "missing"
-	// NodeSubdir is the directory under data dir that holds the Node runtime tree.
-	NodeSubdir = "runtime/node"
 	// RuntimeStateFileName is the file used to persist runtime download state.
 	RuntimeStateFileName = "state.json"
 )
 
-// LoadPersistedState reads runtime/node/state.json. Missing file yields a fresh missing state.
+// LoadPersistedState reads cache/runtime/node/state.json. Missing file yields a fresh missing state.
 func LoadPersistedState() (StateSnapshot, error) {
 	dataDir, err := dir.GetDataDir()
 	if err != nil {
 		return StateSnapshot{}, err
 	}
-	path := filepath.Join(dataDir, NodeSubdir, RuntimeStateFileName)
+	path := filepath.Join(dir.NodeRuntimeRoot(dataDir), RuntimeStateFileName)
 	bytes, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

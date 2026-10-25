@@ -187,7 +187,7 @@ export function AddProviderStepForm(props: {
   }
 
   return (
-    <form id="add-provider-form" onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col space-y-5 pb-4 pt-2">
+    <form id="add-provider-form" onSubmit={handleSubmit} className="scrollbar-track-transparent flex min-h-0 flex-1 flex-col space-y-5 overflow-y-auto pb-4 pr-1 pt-2">
       {/* Enable toggle */}
       <div className="flex shrink-0 flex-col gap-2">
         <span className="text-sm font-medium text-foreground">{t('settingsPage.addProvider.form.enable')}</span>
@@ -246,7 +246,7 @@ export function AddProviderStepForm(props: {
       </div>
 
       {/* Model list */}
-      <div className="flex min-h-0 flex-1 flex-col space-y-1.5">
+      <div className="flex min-h-48 flex-1 flex-col space-y-1.5">
         <div className="flex shrink-0 items-center justify-between">
           <label className="text-sm font-medium text-foreground">{t('settingsPage.addProvider.form.modelList')}</label>
           <div className="flex items-center gap-1">

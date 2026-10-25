@@ -4,11 +4,65 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
+// useReleaseHomeLayout lets a test resolve home-based paths exactly like a release build.
+func useReleaseHomeLayout(t *testing.T) {
+	t.Helper()
+	isolate, base, legacy := isolateTests, defaultBaseDirName, legacyBaseDirNames
+	isolateTests, defaultBaseDirName, legacyBaseDirNames = false, ".fire-poker", []string{".lemontea"}
+	t.Cleanup(func() {
+		isolateTests, defaultBaseDirName, legacyBaseDirNames = isolate, base, legacy
+	})
+}
+
+// TestGetDataDirIsolatesTests proves tests without an override never touch the real home directory.
+func TestGetDataDirIsolatesTests(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("FIRE_POKER_DATA_DIR", "")
+	t.Setenv("LEMONTEA_DATA_DIR", "")
+
+	got, err := GetDataDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.HasPrefix(got, home) {
+		t.Fatalf("test data dir must not live under home, got %q", got)
+	}
+	again, err := GetDataDir()
+	if err != nil || again != got {
+		t.Fatalf("test data dir must be stable per process: %q vs %q, %v", got, again, err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".fire-poker")); !os.IsNotExist(err) {
+		t.Fatalf("home data dir must not be created, stat err %v", err)
+	}
+}
+
+// TestCacheAndLogPathHelpers covers the re-creatable cache layout and its legacy locations.
+func TestCacheAndLogPathHelpers(t *testing.T) {
+	base := filepath.Join("/", "tmp", "fire-poker-test")
+	cases := map[string]string{
+		CacheRoot(base):             filepath.Join(base, "cache"),
+		LogsRoot(base):              filepath.Join(base, "logs"),
+		NodeRuntimeRoot(base):       filepath.Join(base, "cache", "runtime", "node"),
+		LegacyNodeRuntimeRoot(base): filepath.Join(base, "runtime", "node"),
+		WebViewDataRoot(base):       filepath.Join(base, "cache", "webview2"),
+		LegacyWebViewDataRoot(base): filepath.Join(base, "webview2"),
+	}
+	for got, want := range cases {
+		if got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	}
+}
+
 // TestGetDataDirUsesLocatorFileBeforeDefaultDir ensures a custom directory locator wins over the default home path.
 func TestGetDataDirUsesLocatorFileBeforeDefaultDir(t *testing.T) {
+	useReleaseHomeLayout(t)
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 	t.Setenv("USERPROFILE", tempHome)
@@ -39,6 +93,7 @@ func TestGetDataDirUsesLocatorFileBeforeDefaultDir(t *testing.T) {
 }
 
 func TestBrandDataDirectoryCompatibility(t *testing.T) {
+	useReleaseHomeLayout(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -74,6 +129,7 @@ func TestBrandDataDirectoryCompatibility(t *testing.T) {
 }
 
 func TestFreshBrandDataDirectory(t *testing.T) {
+	useReleaseHomeLayout(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)

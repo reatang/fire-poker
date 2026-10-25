@@ -54,14 +54,11 @@ var enUS = map[string]string{
 	"ierror.file.save_temp_file": "Failed to save temporary file",
 
 	// Settings
-	"ierror.settings.load_config":         "Failed to load configuration",
-	"ierror.settings.save_config":         "Failed to save configuration",
-	"ierror.settings.create_dir":          "Failed to create directory",
-	"ierror.settings.copy_file":           "Failed to copy file",
-	"ierror.settings.read_config":         "Failed to read configuration file",
-	"ierror.settings.parse_config":        "Failed to parse configuration",
-	"ierror.settings.write_locator":       "Failed to write data directory locator",
-	"ierror.settings.target_dir_required": "Target data directory is required",
+	"ierror.settings.list_data_dirs": "Failed to list data directories",
+	"ierror.settings.load_config":    "Failed to load configuration",
+	"ierror.settings.save_config":    "Failed to save configuration",
+	"ierror.settings.read_config":    "Failed to read configuration file",
+	"ierror.settings.parse_config":   "Failed to parse configuration",
 
 	// Provider
 	"ierror.provider.create":           "Failed to create provider",

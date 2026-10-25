@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
+	"github.com/reatang/fire-poker/backend/pkg/dir"
 	"github.com/reatang/fire-poker/backend/pkg/global_hotkey"
 	"github.com/reatang/fire-poker/backend/service/settings/settings_dto"
 )
@@ -51,54 +52,6 @@ func (f *fakeShortcutController) UpdateShortcut(ctx context.Context, shortcut st
 	f.updated = append(f.updated, shortcut)
 	f.current = shortcut
 	return nil
-}
-
-// TestApplyFileSettingsMigratesDataAndWritesLocator verifies data migration and locator persistence for custom directories.
-func TestApplyFileSettingsMigratesDataAndWritesLocator(t *testing.T) {
-	tempHome := t.TempDir()
-	sourceDir := t.TempDir()
-	targetDir := filepath.Join(t.TempDir(), "custom-target")
-
-	t.Setenv("HOME", tempHome)
-	t.Setenv("USERPROFILE", tempHome)
-	t.Setenv("FIRE_POKER_DATA_DIR", sourceDir)
-
-	svc := newTestSettingsService(t)
-
-	if err := os.WriteFile(filepath.Join(sourceDir, "config.json"), []byte(`{"language":"zh-CN","data_dir":"`+filepath.ToSlash(sourceDir)+`"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(sourceDir, "data.db"), []byte("sqlite"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := svc.ApplyFileSettings(context.Background(), settings_dto.ApplyFileSettingsInput{TargetDir: targetDir})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := os.Stat(filepath.Join(targetDir, "config.json")); err != nil {
-		t.Fatalf("expected migrated config file: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(targetDir, "data.db")); err != nil {
-		t.Fatalf("expected migrated database file: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(targetDir, "logs")); err != nil {
-		t.Fatalf("expected logs directory: %v", err)
-	}
-
-	locatorBytes, err := os.ReadFile(filepath.Join(tempHome, ".fire-poker", "data_dir.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var locator map[string]string
-	if err := json.Unmarshal(locatorBytes, &locator); err != nil {
-		t.Fatal(err)
-	}
-	if locator["data_dir"] != targetDir {
-		t.Fatalf("expected locator to point at %q, got %q", targetDir, locator["data_dir"])
-	}
 }
 
 // TestSaveLocaleSettingsPersistsLocaleAndLanguage verifies locale settings are written back to config.json.
@@ -227,5 +180,80 @@ func TestSaveShortcutSettingsPersistsAndAppliesQuickChatShortcut(t *testing.T) {
 	}
 	if len(controller.updated) != 1 || controller.updated[0] != "CmdOrCtrl+Shift+K" {
 		t.Fatalf("updated shortcuts = %v, want [CmdOrCtrl+Shift+K]", controller.updated)
+	}
+}
+
+// TestBuildDataDirectoryItemsDarwin covers the macOS listing, including WebKit stores outside the data dir.
+func TestBuildDataDirectoryItemsDarwin(t *testing.T) {
+	dataDir := filepath.Join("/", "Users", "u", ".fire-poker")
+	home := filepath.Join("/", "Users", "u")
+	tempDir := filepath.Join("/", "tmp", "fire-poker")
+
+	items := buildDataDirectoryItems(dataDir, "darwin", home, tempDir)
+	ids := make([]string, 0, len(items))
+	byID := map[string]settings_dto.DataDirectoryItem{}
+	for _, item := range items {
+		ids = append(ids, item.ID)
+		byID[item.ID] = item
+	}
+	wantIDs := []string{"data_root", "config", "database", "skills", "plugins", "logs", "cache", "webview_data", "webview_cache", "temp"}
+	if len(ids) != len(wantIDs) {
+		t.Fatalf("ids = %v, want %v", ids, wantIDs)
+	}
+	for i := range wantIDs {
+		if ids[i] != wantIDs[i] {
+			t.Fatalf("ids = %v, want %v", ids, wantIDs)
+		}
+	}
+
+	config := byID["config"]
+	if !config.IsFile || config.Path != filepath.Join(dataDir, "config.json") || config.RevealDir != dataDir {
+		t.Fatalf("unexpected config item: %+v", config)
+	}
+	cache := byID["cache"]
+	if cache.IsFile || cache.Path != filepath.Join(dataDir, "cache") || cache.RevealDir != cache.Path {
+		t.Fatalf("unexpected cache item: %+v", cache)
+	}
+	if got := byID["webview_data"].Path; got != filepath.Join(home, "Library", "WebKit", dir.BundleIdentifier) {
+		t.Fatalf("unexpected webview data path: %q", got)
+	}
+}
+
+// TestBuildDataDirectoryItemsOtherPlatforms keeps WebView stores out of the listing where they live inside the cache.
+func TestBuildDataDirectoryItemsOtherPlatforms(t *testing.T) {
+	for _, goos := range []string{"windows", "linux"} {
+		items := buildDataDirectoryItems(filepath.Join("/", "d"), goos, filepath.Join("/", "h"), filepath.Join("/", "t"))
+		for _, item := range items {
+			if item.ID == "webview_data" || item.ID == "webview_cache" {
+				t.Fatalf("%s must not list %s", goos, item.ID)
+			}
+		}
+		if last := items[len(items)-1]; last.ID != "temp" {
+			t.Fatalf("%s: temp should be listed last, got %q", goos, last.ID)
+		}
+	}
+}
+
+// TestListDataDirectoriesReportsExistence marks only paths that exist on disk.
+func TestListDataDirectoriesReportsExistence(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("FIRE_POKER_DATA_DIR", dataDir)
+	if err := os.WriteFile(filepath.Join(dataDir, "config.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := newTestSettingsService(t).ListDataDirectories(context.Background(), settings_dto.ListDataDirectoriesInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exists := map[string]bool{}
+	for _, item := range out.Items {
+		exists[item.ID] = item.Exists
+	}
+	if !exists["data_root"] || !exists["config"] {
+		t.Fatalf("data root and config should exist: %v", exists)
+	}
+	if exists["database"] || exists["logs"] || exists["cache"] {
+		t.Fatalf("untouched paths should be reported missing: %v", exists)
 	}
 }

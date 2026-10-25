@@ -8,6 +8,3 @@ const NodeDistBaseURL = "https://nodejs.org/dist"
 
 // RuntimeStateFileName is the file used to persist runtime download state.
 const RuntimeStateFileName = "state.json"
-
-// NodeSubdir is the directory under data dir that holds the Node runtime tree.
-const NodeSubdir = "runtime/node"

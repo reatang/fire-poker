@@ -54,6 +54,14 @@ func defaultToolConfirmDecider(ctx context.Context, input ToolConfirmDecisionInp
 	if decision, ok := deterministicToolConfirmDecision(input); ok {
 		return decision, nil
 	}
+	// Static confirmation is a floor: model judgment may add confirmation but never remove it.
+	if input.Meta.RequiresConfirm {
+		return ToolConfirmDecision{
+			RequireConfirm: true,
+			Reason:         "static risky action",
+			Source:         "static",
+		}, nil
+	}
 	if strings.TrimSpace(input.ModelName) == "" || strings.TrimSpace(input.BaseURL) == "" {
 		return heuristicToolConfirmDecision(input), nil
 	}
@@ -172,7 +180,8 @@ func deterministicToolConfirmDecision(input ToolConfirmDecisionInput) (ToolConfi
 			Source:         "policy",
 		}, true
 	}
-	if isSafeShellCommand(normalized) {
+	// Control syntax is checked on the raw command because normalization folds newlines into spaces.
+	if isSafeShellCommand(normalized) && !hasShellControlSyntax(command) {
 		return ToolConfirmDecision{
 			RequireConfirm: false,
 			Reason:         "safe shell inspection",
@@ -228,6 +237,25 @@ func isSafeShellCommand(command string) bool {
 	}
 	for _, prefix := range safePrefixes {
 		if command == strings.TrimSpace(prefix) || strings.HasPrefix(command, prefix) {
+			if prefix == "find " && findHasSideEffects(command) {
+				return false
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// hasShellControlSyntax reports chaining, piping, redirection or substitution that can smuggle extra commands.
+func hasShellControlSyntax(command string) bool {
+	return strings.ContainsAny(command, ";&|<>`\n\r") || strings.Contains(command, "$(")
+}
+
+// findHasSideEffects reports find actions that delete files, run commands or write output files.
+func findHasSideEffects(command string) bool {
+	for _, field := range strings.Fields(command) {
+		switch field {
+		case "-delete", "-exec", "-execdir", "-ok", "-okdir", "-fls", "-fprint", "-fprint0", "-fprintf":
 			return true
 		}
 	}

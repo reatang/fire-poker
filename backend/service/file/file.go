@@ -73,7 +73,7 @@ func (f *File) SaveTempFile(ctx context.Context, input file_dto.SaveTempFileInpu
 		return nil, ierror.Error(ierror.ErrFileSaveTempFile, err)
 	}
 
-	tmpDir := filepath.Join(os.TempDir(), "fire-poker")
+	tmpDir := dir.TempRoot()
 	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
 		return nil, ierror.Error(ierror.ErrFileSaveTempFile, err)
 	}

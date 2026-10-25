@@ -5,12 +5,13 @@ import (
 	"os"
 	"path/filepath"
 
+	pkgdir "github.com/reatang/fire-poker/backend/pkg/dir"
 	"github.com/wailsapp/wails/v3/pkg/application"
 )
 
 func (f *File) ServiceStartup(ctx context.Context, options application.ServiceOptions) error {
 	f.wailsApp = application.Get()
-	cleanTempDir(filepath.Join(os.TempDir(), "fire-poker"))
+	cleanTempDir(pkgdir.TempRoot())
 	return nil
 }
 

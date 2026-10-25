@@ -1,7 +1,7 @@
 import type { FontSize, Language } from '@/types'
 
-export type SettingsPrimaryTab = 'general' | 'providers' | 'plugins' | 'skills' | 'memory' | 'about'
-export type GeneralSettingsTab = 'display' | 'locale' | 'file' | 'shortcuts'
+export type SettingsPrimaryTab = 'general' | 'providers' | 'plugins' | 'skills' | 'memory' | 'data' | 'about'
+export type GeneralSettingsTab = 'display' | 'locale' | 'shortcuts'
 
 export const SYSTEM_TOOLS_ID = 'system-tools'
 export type ShortcutValidationStatus = 'available' | 'conflict' | 'invalid' | 'idle'
