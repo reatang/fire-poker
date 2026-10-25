@@ -3,9 +3,10 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
@@ -20,9 +21,31 @@ import (
 	"trpc.group/trpc-go/trpc-agent-go/runner"
 )
 
-// injectSessionRunner registers a fake using the actual session-scoped cache identity.
-func injectSessionRunner(t *testing.T, manager *Manager, sessionID uint, baseURL, modelName string, providerType pkgProvider.Type, fake runner.Runner) {
+// createTestProvider stores an enabled provider so turns can resolve credentials by ID.
+func createTestProvider(t *testing.T, manager *Manager, baseURL string, providerType pkgProvider.Type) uint {
 	t.Helper()
+	provider, err := manager.Storage().CreateProvider(data_models.Provider{
+		ProviderName: "test",
+		ProviderType: providerType,
+		BaseUrl:      baseURL,
+		ApiKey:       "test-key",
+		Enable:       true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return provider.ID
+}
+
+// injectSessionRunner stores a provider and registers a fake under the actual session-scoped
+// cache identity, returning the provider ID the turn must send.
+func injectSessionRunner(t *testing.T, manager *Manager, sessionID uint, baseURL, modelName string, providerType pkgProvider.Type, fake runner.Runner) uint {
+	t.Helper()
+	providerID := createTestProvider(t, manager, baseURL, providerType)
+	cfg, err := manager.ResolveModelConfig(providerID, modelName)
+	if err != nil {
+		t.Fatal(err)
+	}
 	ids, err := manager.SessionToolIDs(sessionID)
 	if err != nil {
 		t.Fatal(err)
@@ -31,8 +54,8 @@ func injectSessionRunner(t *testing.T, manager *Manager, sessionID uint, baseURL
 	if err != nil {
 		t.Fatal(err)
 	}
-	key := fmt.Sprintf("%s|session:%d|catalog:%d|services:%d", runnerCacheKey(baseURL, modelName, providerType, ids, session.Kind), sessionID, manager.toolRegistry.Version(), manager.toolDependenciesVersion)
-	manager.runners[key] = fake
+	manager.runners.add(manager.runnerKey(cfg, ids, session.Kind, sessionID), fake)
+	return providerID
 }
 
 type fakeCliInstallProgressReporter struct{}
@@ -223,37 +246,150 @@ func TestBuildMCPToolSetsReturnsNoneWhenNoExtensionToolIsSelected(t *testing.T) 
 	}
 }
 
-func TestGetOrCreateRunnerCachesRunnerByBaseURLAndModel(t *testing.T) {
+func TestGetOrCreateRunnerSeparatesRunnersByToolSelection(t *testing.T) {
 	manager := NewManager(nil)
+	cfg := ModelConfig{ProviderID: 1, BaseURL: "https://api.example.com/v1", APIKey: "key-1", ModelName: "gpt-test", ProviderType: pkgProvider.OpenAiCompatibility}
 
-	first, err := manager.GetOrCreateRunner(
-		"https://api.example.com/v1",
-		"key-1",
-		"gpt-test",
-		pkgProvider.OpenAiCompatibility,
-		[]string{"code_exec"},
-		"user",
-		1,
-	)
+	first, err := manager.GetOrCreateRunner(cfg, []string{"code_exec"}, "user", 1)
 	if err != nil {
 		t.Fatalf("first runner: %v", err)
 	}
 
-	second, err := manager.GetOrCreateRunner(
-		"https://api.example.com/v1",
-		"key-2",
-		"gpt-test",
-		pkgProvider.OpenAiCompatibility,
-		[]string{"web_fetch"},
-		"user",
-		1,
-	)
+	second, err := manager.GetOrCreateRunner(cfg, []string{"web_fetch"}, "user", 1)
 	if err != nil {
 		t.Fatalf("second runner: %v", err)
 	}
 
 	if first == second {
 		t.Fatal("expected different runners when enabled tools differ")
+	}
+}
+
+// TestGetOrCreateRunnerRebuildsAfterCredentialChange proves an edited API key or base URL
+// is not served by a runner built with the old credentials.
+func TestGetOrCreateRunnerRebuildsAfterCredentialChange(t *testing.T) {
+	manager := NewManager(nil)
+	cfg := ModelConfig{ProviderID: 1, BaseURL: "https://api.example.com/v1", APIKey: "old-key", ModelName: "gpt-test", ProviderType: pkgProvider.OpenAiCompatibility}
+
+	original, err := manager.GetOrCreateRunner(cfg, nil, "user", 1)
+	if err != nil {
+		t.Fatalf("original runner: %v", err)
+	}
+	same, err := manager.GetOrCreateRunner(cfg, nil, "user", 1)
+	if err != nil {
+		t.Fatalf("same runner: %v", err)
+	}
+	if original != same {
+		t.Fatal("expected unchanged config to reuse the cached runner")
+	}
+
+	rotated := cfg
+	rotated.APIKey = "new-key"
+	afterKey, err := manager.GetOrCreateRunner(rotated, nil, "user", 1)
+	if err != nil {
+		t.Fatalf("rotated-key runner: %v", err)
+	}
+	if afterKey == original {
+		t.Fatal("expected a new runner after the API key changed")
+	}
+
+	moved := rotated
+	moved.BaseURL = "https://proxy.example.com/v1"
+	afterURL, err := manager.GetOrCreateRunner(moved, nil, "user", 1)
+	if err != nil {
+		t.Fatalf("moved-url runner: %v", err)
+	}
+	if afterURL == afterKey {
+		t.Fatal("expected a new runner after the base URL changed")
+	}
+}
+
+// TestRunnerKeyOmitsAPIKey keeps raw credentials out of cache keys that may surface in logs or dumps.
+func TestRunnerKeyOmitsAPIKey(t *testing.T) {
+	manager := NewManager(nil)
+	key := manager.runnerKey(ModelConfig{ProviderID: 1, BaseURL: "https://api.example.com", APIKey: "sk-very-secret", ModelName: "m"}, nil, "user", 1)
+	if strings.Contains(key, "sk-very-secret") {
+		t.Fatalf("runner key leaked the API key: %s", key)
+	}
+}
+
+func TestResolveModelConfigLoadsStoredCredentials(t *testing.T) {
+	t.Setenv("FIRE_POKER_DATA_DIR", t.TempDir())
+	manager := NewManager(newTestStorage(t))
+	providerID := createTestProvider(t, manager, "https://api.example.com/v1", pkgProvider.Deepseek)
+
+	cfg, err := manager.ResolveModelConfig(providerID, "  deepseek-chat  ")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	want := ModelConfig{ProviderID: providerID, BaseURL: "https://api.example.com/v1", APIKey: "test-key", ModelName: "deepseek-chat", ProviderType: pkgProvider.Deepseek}
+	if cfg != want {
+		t.Fatalf("resolved %+v, want %+v", cfg, want)
+	}
+}
+
+func TestResolveModelConfigRejectsInvalidSelections(t *testing.T) {
+	t.Setenv("FIRE_POKER_DATA_DIR", t.TempDir())
+	manager := NewManager(newTestStorage(t))
+	enabledID := createTestProvider(t, manager, "https://api.example.com/v1", pkgProvider.OpenAiCompatibility)
+	disabledID := createTestProvider(t, manager, "https://disabled.example.com/v1", pkgProvider.OpenAiCompatibility)
+	disabled, err := manager.Storage().GetProvider(disabledID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Enable has a GORM default of true, so a disabled row must be written by update rather than create.
+	disabled.Enable = false
+	if err := manager.Storage().UpdateProvider(*disabled); err != nil {
+		t.Fatal(err)
+	}
+	deletedID := createTestProvider(t, manager, "https://deleted.example.com/v1", pkgProvider.OpenAiCompatibility)
+	if err := manager.Storage().DeleteProviderCascade(deletedID); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name       string
+		providerID uint
+		modelName  string
+		want       error
+	}{
+		{name: "missing provider id", providerID: 0, modelName: "m", want: ErrProviderRequired},
+		{name: "blank model", providerID: enabledID, modelName: "  ", want: ErrModelRequired},
+		{name: "unknown provider", providerID: 9999, modelName: "m", want: ErrProviderNotFound},
+		{name: "deleted provider", providerID: deletedID, modelName: "m", want: ErrProviderNotFound},
+		{name: "disabled provider", providerID: disabledID, modelName: "m", want: ErrProviderDisabled},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := manager.ResolveModelConfig(tc.providerID, tc.modelName); !errors.Is(err, tc.want) {
+				t.Fatalf("expected %v, got %v", tc.want, err)
+			}
+		})
+	}
+}
+
+// TestSendMessageWithUnknownProviderLeavesNoUserMessage proves credential resolution happens before any write.
+func TestSendMessageWithUnknownProviderLeavesNoUserMessage(t *testing.T) {
+	t.Setenv("FIRE_POKER_DATA_DIR", t.TempDir())
+	manager := NewManager(newTestStorage(t))
+	session, err := manager.Storage().CreateSession(data_models.Session{Title: "no provider"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = NewChatHandler(manager).SendMessage(context.Background(), SendMessageParams{SessionID: session.ID, Content: "hello", ProviderID: 9999, ModelName: "m"})
+	if !errors.Is(err, ErrProviderNotFound) {
+		t.Fatalf("expected provider-not-found error, got %v", err)
+	}
+	count, err := manager.Storage().CountMessagesForSession(session.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("expected no persisted messages, got %d", count)
+	}
+	if manager.Streams().IsActive(session.ID) {
+		t.Fatal("expected the stream reservation to be released")
 	}
 }
 

@@ -45,7 +45,7 @@ func TestSessionSelectionControlsLLMRequestTools(t *testing.T) {
 		t.Run(fmt.Sprintf("selection_%v", ids), func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			r, err := manager.GetOrCreateRunner(server.URL+"/v1", "test-key", "test", pkgProvider.OpenAiCompatibility, ids, "user", 1)
+			r, err := manager.GetOrCreateRunner(ModelConfig{ProviderID: 1, BaseURL: server.URL + "/v1", APIKey: "test-key", ModelName: "test", ProviderType: pkgProvider.OpenAiCompatibility}, ids, "user", 1)
 			if err != nil {
 				t.Fatal(err)
 			}

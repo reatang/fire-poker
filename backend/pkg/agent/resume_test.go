@@ -52,7 +52,8 @@ func TestInterruptedTurnResumesFromStoredHistory(t *testing.T) {
 	defer server.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	p := SendMessageParams{SessionID: s.ID, Content: "写一篇秋天的散文", BaseURL: server.URL + "/v1", ModelName: "test", ProviderType: "openai_compatibility"}
+	providerID := createTestProvider(t, manager, server.URL+"/v1", "openai_compatibility")
+	p := SendMessageParams{SessionID: s.ID, Content: "写一篇秋天的散文", ProviderID: providerID, ModelName: "test"}
 	h := NewChatHandler(manager)
 	if err := h.SendMessage(ctx, p); err != nil {
 		t.Fatal(err)
@@ -162,8 +163,8 @@ func TestPerSessionInstructionsDoNotLeakThroughCachedRunner(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		injectSessionRunner(t, m, s.ID, "https://example.test", "model", "", r)
-		if err := h.SendMessage(context.Background(), SendMessageParams{SessionID: s.ID, Content: "你好", BaseURL: "https://example.test", ModelName: "model"}); err != nil {
+		providerID := injectSessionRunner(t, m, s.ID, "https://example.test", "model", "", r)
+		if err := h.SendMessage(context.Background(), SendMessageParams{SessionID: s.ID, Content: "你好", ProviderID: providerID, ModelName: "model"}); err != nil {
 			t.Fatal(err)
 		}
 		expected := instruction

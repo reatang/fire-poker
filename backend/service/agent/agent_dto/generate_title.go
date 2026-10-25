@@ -1,13 +1,10 @@
 package agent_dto
 
-import "github.com/reatang/fire-poker/backend/pkg/provider"
-
+// GenerateTitleInput selects the session and model; credentials are resolved on the backend.
 type GenerateTitleInput struct {
-	SessionID    uint          `json:"session_id"`
-	BaseURL      string        `json:"base_url"`
-	ApiKey       string        `json:"api_key"`
-	ModelName    string        `json:"model_name"`
-	ProviderType provider.Type `json:"provider_type"`
+	SessionID  uint   `json:"session_id"`
+	ProviderID uint   `json:"provider_id"`
+	ModelName  string `json:"model_name"`
 }
 
 type GenerateTitleOutput struct {

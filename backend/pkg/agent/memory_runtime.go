@@ -159,16 +159,12 @@ Convert relative dates to absolute dates using the current date.`
 		params.Content,
 		assistantContent,
 	)
-	resp, err := OneshotComplete(ctx, OneshotRequest{
-		BaseURL:      params.BaseURL,
-		APIKey:       params.ApiKey,
-		ModelName:    params.ModelName,
-		ProviderType: params.ProviderType,
-		System:       system,
-		User:         user,
-		MaxTokens:    500,
-		Timeout:      45 * time.Second,
-	})
+	resp, err := OneshotComplete(ctx, params.model.ApplyTo(OneshotRequest{
+		System:    system,
+		User:      user,
+		MaxTokens: 500,
+		Timeout:   45 * time.Second,
+	}))
 	if err != nil {
 		return err
 	}

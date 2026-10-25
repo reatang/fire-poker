@@ -35,14 +35,17 @@ func TestRegisteredToolNeedsNoManagerDispatch(t *testing.T) {
 	t.Fatal("registered custom tool was not constructed")
 }
 
+// unreachableModelConfig builds runners without ever contacting a model.
+var unreachableModelConfig = ModelConfig{ProviderID: 1, BaseURL: "http://127.0.0.1:1", APIKey: "unused", ModelName: "test"}
+
 // TestRunnerCacheSeparatesSessionScopedTools protects the per-session factory lifecycle.
 func TestRunnerCacheSeparatesSessionScopedTools(t *testing.T) {
 	m := NewManager(nil)
-	first, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", nil, "task", 1)
+	first, err := m.GetOrCreateRunner(unreachableModelConfig, nil, "task", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", nil, "task", 2)
+	second, err := m.GetOrCreateRunner(unreachableModelConfig, nil, "task", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,16 +57,16 @@ func TestRunnerCacheSeparatesSessionScopedTools(t *testing.T) {
 // TestRunnerCacheTracksRegistrationAndServiceChanges ensures cached runners see new capabilities.
 func TestRunnerCacheTracksRegistrationAndServiceChanges(t *testing.T) {
 	m := NewManager(nil)
-	first, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", nil, "user", 1)
+	first, err := m.GetOrCreateRunner(unreachableModelConfig, nil, "user", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	same, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", nil, "user", 1)
+	same, err := m.GetOrCreateRunner(unreachableModelConfig, nil, "user", 1)
 	if err != nil || same != first {
 		t.Fatal("unchanged scope should reuse its runner")
 	}
 	registerTestTool(t, m.ToolRegistry(), toolkit.Meta{Name: "new_builtin", Category: toolkit.CategoryBuiltin})
-	second, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", nil, "user", 1)
+	second, err := m.GetOrCreateRunner(unreachableModelConfig, nil, "user", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +74,7 @@ func TestRunnerCacheTracksRegistrationAndServiceChanges(t *testing.T) {
 		t.Fatal("catalog registration did not invalidate runner assembly")
 	}
 	m.SetCliInstallProgressReporter(&fakeCliInstallProgressReporter{})
-	third, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", nil, "user", 1)
+	third, err := m.GetOrCreateRunner(unreachableModelConfig, nil, "user", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -83,11 +86,11 @@ func TestRunnerCacheTracksRegistrationAndServiceChanges(t *testing.T) {
 // TestRunnerCacheDistinguishesUnsetAndEmptySelection prevents an all-off selection reusing default tools.
 func TestRunnerCacheDistinguishesUnsetAndEmptySelection(t *testing.T) {
 	m := NewManager(nil)
-	first, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", nil, "user", 1)
+	first, err := m.GetOrCreateRunner(unreachableModelConfig, nil, "user", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", []string{}, "user", 1)
+	second, err := m.GetOrCreateRunner(unreachableModelConfig, []string{}, "user", 1)
 	if err != nil {
 		t.Fatal(err)
 	}

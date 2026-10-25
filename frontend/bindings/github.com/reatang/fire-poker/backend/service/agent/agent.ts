@@ -32,6 +32,9 @@ export function ForkSession(input: agent_dto$0.ForkSessionInput): $CancellablePr
     });
 }
 
+/**
+ * GenerateTitle summarizes the opening turns into a session title with a single tool-free completion.
+ */
 export function GenerateTitle(input: agent_dto$0.GenerateTitleInput): $CancellablePromise<agent_dto$0.GenerateTitleOutput | null> {
     return $Call.ByID(2853380740, input).then(($result: any) => {
         return $$createType7($result);

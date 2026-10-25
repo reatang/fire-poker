@@ -435,10 +435,8 @@ export function SettingsApp() {
             content,
             systemPrompt: '',
             skillName: 'install-cli-from-docs',
-            baseUrl: defaultProvider?.base_url ?? '',
-            apiKey: defaultProvider?.api_key ?? '',
+            providerId: defaultProvider?.id ?? 0,
             modelName: defaultModel?.model ?? '',
-            providerType: (defaultProvider?.provider_type ?? '') as any,
             enabledUserTools: await useChatStore.getState().loadSessionTools(sessionId),
             attachments: [],
           })

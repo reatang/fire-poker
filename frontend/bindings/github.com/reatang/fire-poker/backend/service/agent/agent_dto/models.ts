@@ -5,10 +5,6 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore: Unused imports
-import * as provider$0 from "../../../pkg/provider/models.js";
-
 /**
  * AttachmentInput 是前端发送消息时携带的附件元数据。
  * Name/Mime 可空，后端通过 path 推断后写入存储与 model.Message。
@@ -183,29 +179,24 @@ export class ForkSessionOutput {
     }
 }
 
+/**
+ * GenerateTitleInput selects the session and model; credentials are resolved on the backend.
+ */
 export class GenerateTitleInput {
     "session_id": number;
-    "base_url": string;
-    "api_key": string;
+    "provider_id": number;
     "model_name": string;
-    "provider_type": provider$0.Type;
 
     /** Creates a new GenerateTitleInput instance. */
     constructor($$source: Partial<GenerateTitleInput> = {}) {
         if (!("session_id" in $$source)) {
             this["session_id"] = 0;
         }
-        if (!("base_url" in $$source)) {
-            this["base_url"] = "";
-        }
-        if (!("api_key" in $$source)) {
-            this["api_key"] = "";
+        if (!("provider_id" in $$source)) {
+            this["provider_id"] = 0;
         }
         if (!("model_name" in $$source)) {
             this["model_name"] = "";
-        }
-        if (!("provider_type" in $$source)) {
-            this["provider_type"] = provider$0.Type.$zero;
         }
 
         Object.assign(this, $$source);
@@ -675,16 +666,17 @@ export class SaveSessionToolsInput {
     }
 }
 
+/**
+ * SendMessageInput selects the provider and model by identity; the backend resolves credentials.
+ */
 export class SendMessageInput {
     "regenerate_message_id"?: number;
     "session_id": number;
     "content": string;
     "system_prompt"?: string;
     "skill_name"?: string;
-    "base_url": string;
-    "api_key": string;
+    "provider_id": number;
     "model_name": string;
-    "provider_type": provider$0.Type;
     "enabled_user_tools": string[];
     "attachments"?: AttachmentInput[];
 
@@ -696,17 +688,11 @@ export class SendMessageInput {
         if (!("content" in $$source)) {
             this["content"] = "";
         }
-        if (!("base_url" in $$source)) {
-            this["base_url"] = "";
-        }
-        if (!("api_key" in $$source)) {
-            this["api_key"] = "";
+        if (!("provider_id" in $$source)) {
+            this["provider_id"] = 0;
         }
         if (!("model_name" in $$source)) {
             this["model_name"] = "";
-        }
-        if (!("provider_type" in $$source)) {
-            this["provider_type"] = provider$0.Type.$zero;
         }
         if (!("enabled_user_tools" in $$source)) {
             this["enabled_user_tools"] = [];
@@ -719,14 +705,14 @@ export class SendMessageInput {
      * Creates a new SendMessageInput instance from a string or object.
      */
     static createFrom($$source: any = {}): SendMessageInput {
-        const $$createField9_0 = $$createType0;
-        const $$createField10_0 = $$createType6;
+        const $$createField7_0 = $$createType0;
+        const $$createField8_0 = $$createType6;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("enabled_user_tools" in $$parsedSource) {
-            $$parsedSource["enabled_user_tools"] = $$createField9_0($$parsedSource["enabled_user_tools"]);
+            $$parsedSource["enabled_user_tools"] = $$createField7_0($$parsedSource["enabled_user_tools"]);
         }
         if ("attachments" in $$parsedSource) {
-            $$parsedSource["attachments"] = $$createField10_0($$parsedSource["attachments"]);
+            $$parsedSource["attachments"] = $$createField8_0($$parsedSource["attachments"]);
         }
         return new SendMessageInput($$parsedSource as Partial<SendMessageInput>);
     }
@@ -924,10 +910,8 @@ export class SpawnTaskSessionInput {
     "system_prompt": string;
     "user_message": string;
     "skill_name": string;
-    "base_url": string;
-    "api_key": string;
+    "provider_id": number;
     "model_name": string;
-    "provider_type": provider$0.Type;
 
     /** Creates a new SpawnTaskSessionInput instance. */
     constructor($$source: Partial<SpawnTaskSessionInput> = {}) {
@@ -943,17 +927,11 @@ export class SpawnTaskSessionInput {
         if (!("skill_name" in $$source)) {
             this["skill_name"] = "";
         }
-        if (!("base_url" in $$source)) {
-            this["base_url"] = "";
-        }
-        if (!("api_key" in $$source)) {
-            this["api_key"] = "";
+        if (!("provider_id" in $$source)) {
+            this["provider_id"] = 0;
         }
         if (!("model_name" in $$source)) {
             this["model_name"] = "";
-        }
-        if (!("provider_type" in $$source)) {
-            this["provider_type"] = provider$0.Type.$zero;
         }
 
         Object.assign(this, $$source);

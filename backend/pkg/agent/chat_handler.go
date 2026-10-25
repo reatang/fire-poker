@@ -13,7 +13,6 @@ import (
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	"github.com/reatang/fire-poker/backend/pkg/id/event_id"
 	"github.com/reatang/fire-poker/backend/pkg/ierror"
-	pkgProvider "github.com/reatang/fire-poker/backend/pkg/provider"
 	agentpkg "trpc.group/trpc-go/trpc-agent-go/agent"
 	"trpc.group/trpc-go/trpc-agent-go/event"
 	"trpc.group/trpc-go/trpc-agent-go/model"
@@ -32,12 +31,14 @@ type SendMessageParams struct {
 	Content             string
 	SystemPrompt        string
 	PrimedSkill         string
-	BaseURL             string
-	ApiKey              string
-	ModelName           string
-	ProviderType        pkgProvider.Type
-	EnabledUserTools    []string
-	Attachments         []Attachment
+	// ProviderID and ModelName select the model; credentials are resolved from storage.
+	ProviderID       uint
+	ModelName        string
+	EnabledUserTools []string
+	Attachments      []Attachment
+
+	// model is resolved by SendMessage and reused by the event consumer and memory encoder.
+	model ModelConfig
 }
 
 // NewChatHandler creates a chat handler for the given manager.
@@ -209,6 +210,12 @@ func (ch *ChatHandler) SendMessage(ctx context.Context, params SendMessageParams
 			ch.manager.Streams().Remove(params.SessionID)
 		}
 	}()
+	// Resolve credentials before any write so an invalid provider leaves no orphaned user message.
+	params.model, err = ch.manager.ResolveModelConfig(params.ProviderID, params.ModelName)
+	if err != nil {
+		return fmt.Errorf("resolve model: %w", err)
+	}
+	params.ModelName = params.model.ModelName
 	stor := ch.manager.Storage()
 	var regenerationQuestionID uint
 	if params.RegenerateMessageID > 0 {
@@ -290,10 +297,7 @@ func (ch *ChatHandler) SendMessage(ctx context.Context, params SendMessageParams
 	ch.updateSessionStatus(params.SessionID, "loading")
 
 	r, err := ch.manager.GetOrCreateRunner(
-		params.BaseURL,
-		params.ApiKey,
-		params.ModelName,
-		params.ProviderType,
+		params.model,
 		params.EnabledUserTools,
 		session.Kind,
 		params.SessionID,
@@ -315,10 +319,10 @@ func (ch *ChatHandler) SendMessage(ctx context.Context, params SendMessageParams
 
 	runCtx := withRunContext(streamCtx, runContext{
 		SessionID:    params.SessionID,
-		ModelName:    params.ModelName,
-		BaseURL:      params.BaseURL,
-		APIKey:       params.ApiKey,
-		ProviderType: params.ProviderType,
+		ModelName:    params.model.ModelName,
+		BaseURL:      params.model.BaseURL,
+		APIKey:       params.model.APIKey,
+		ProviderType: params.model.ProviderType,
 	})
 
 	basePrompt := session.SystemPrompt

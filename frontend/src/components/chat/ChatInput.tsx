@@ -449,10 +449,8 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
     await sendMessage({
       sessionId: nextSessionId,
       content,
-      baseUrl: selectedProvider.provider.base_url,
-      apiKey: selectedProvider.provider.api_key,
+      providerId: selectedProvider.provider.id,
       modelName: selectedModel.model,
-      providerType: selectedProvider.provider.provider_type,
       enabledUserTools,
       attachments: outboundAttachments,
     })

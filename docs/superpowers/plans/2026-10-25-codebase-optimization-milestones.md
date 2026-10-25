@@ -27,7 +27,7 @@ cd frontend && npx tsc --noEmit && npx vitest run
 |---|---|---|---|---|
 | M0 | 基线与护栏 | — | 无 | 否 |
 | M1 | 工具审批安全加固（主体已由 `296cedd` 完成） | P0 | M0 | 否 |
-| M2 | 凭据收敛与 runner 生命周期 | P1 | M0 | **是** |
+| M2 | 凭据收敛与 runner 生命周期（已完成） | P1 | M0 | **是** |
 | M3 | 配置仓库与 SQLite 并发 | P1 | M1（同改 `lookupToolMeta`） | 否 |
 | M4 | 后端结构整理与 i18n | P2 | M2、M3 | 是（事件类型） |
 | M5 | 前端结构整理 | P2 | M2（同改 `chatStore`） | 否 |
@@ -123,32 +123,43 @@ M1 与 M2 改动的文件基本不重叠，可以并行；M5 可以在 M2 合并
 - Regenerate: `frontend/bindings/**`
 - Test: `backend/pkg/agent/manager_test.go`、`chat_handler_test.go`、`backend/service/agent/agent_test.go`、`frontend/src/__tests__/chatStore.test.ts`
 
+> **状态：已完成**（2026-10-25）。实际实现与原计划的差异见各任务下的“实现说明”。
+
 ### Task 2.1 后端按 provider 解析凭据
 
-- [ ] DTO 改为 `ProviderID uint` + `ModelName string`，移除 `BaseURL` / `ApiKey` / `ProviderType`。
-- [ ] 新增 provider 解析接口（如 `ProviderResolver.Resolve(id) (baseURL, apiKey, type, error)`），由 storage 实现，注入 agent Manager。
-- [ ] `runContext` 只保存 provider ID 与解析结果，供工具审批 decider 与记忆编码使用。
-- [ ] 测试：provider 不存在/已禁用时返回 `ierror`；正常路径凭据来自数据库。
+- [x] `SendMessageInput`、`GenerateTitleInput`、`SpawnTaskSessionInput` 改为 `ProviderID uint` + `ModelName string`，移除 `BaseURL` / `ApiKey` / `ProviderType`。
+- [x] 新增 `backend/pkg/agent/model_config.go`：`ModelConfig` 与 `Manager.ResolveModelConfig(providerID, modelName)`，配合新增的 `storage.GetProvider`；区分 `ErrProviderRequired`、`ErrModelRequired`、`ErrProviderNotFound`（含已删除）、`ErrProviderDisabled`。
+- [x] `ChatHandler.SendMessage` 在 `TryStart` 之后、任何读写之前解析凭据；`runContext`、记忆编码共用解析结果。
+- [x] 测试：正常路径凭据来自数据库；4 种无效选择各自返回对应错误；provider 无效时不写入用户消息、释放流占用。
+- 实现说明：没有单独定义 `ProviderResolver` 接口——Manager 本来就持有 storage，直接查询即可。`runContext` 保持原有扁平字段，由 `ModelConfig` 填充，避免改动审批相关测试。错误在 service 层统一包装为 `ErrAgentSendMessage`，暂无“provider 已禁用”这类细分的多语言提示，留给 M4 的 i18n 任务。
 
 ### Task 2.2 runner 缓存失效与淘汰
 
-- [ ] 缓存 key 去掉 `sessionID`（若 SDK 要求每会话独立实例，则改为 LRU，容量如 32）。
-- [ ] Manager 提供 `InvalidateProvider(id)`，provider 编辑/删除/启停后调用。
-- [ ] 测试：编辑 Key 后再次获取 runner 得到新实例；超过容量后最早的条目被淘汰。
+- [x] 保留按会话区分 runner：shell、task_state 等工具在构建时就绑定了 `sessionID`，不能跨会话共享。
+- [x] 新增 `backend/pkg/agent/runner_cache.go`：并发安全的 LRU，容量 `maxCachedRunners = 32`，替换原来只增不减的 map；去掉了已经没有调用方的 `legacyKey` 查找。
+- [x] 缓存 key 改为 `provider ID + 凭据指纹（baseURL、apiKey、类型的 sha256 前 8 字节）+ 模型 + 工具 + 会话 + 版本号`：改了 Key 或 Base URL 会自然不再命中旧 runner，key 中不含明文 Key。
+- [x] 测试：改 Key、改 Base URL 后都会得到新 runner，配置不变时复用；key 不含明文 Key；LRU 淘汰顺序、并发写入时保留先写入者、clear、`-race` 下的并发访问。
+- 实现说明：没有做 `InvalidateProvider(id)` 以及 provider 服务、`main.go` 之间的接线。凭据指纹已经保证不会用到旧 Key；已删除或禁用的 provider 在解析阶段就会被拒，旧 runner 由 LRU 自然淘汰。
 
 ### Task 2.3 标题生成走 oneshot
 
-- [ ] `GenerateTitle` 改用 `OneshotComplete`，不绑定工具、不创建 SDK 会话。
-- [ ] 删除 `fmt.Println`，日志统一走 `logger`。
-- [ ] 测试：标题生成不会在 `sessionService` 留下会话。
+- [x] `GenerateTitle` 改用 `OneshotComplete`（最多 64 tokens、30 秒超时）：不绑定工具，也不创建 SDK 会话，原先那个从不删除的固定会话 `title-<id>` 不复存在。
+- [x] 删除 `fmt.Println`，改用 `log.Printf`（`main.go` 已把标准库 log 接到文件日志）；删除不再使用的 `collectTitleFromEvents` 及其两个测试。
+- [x] 测试：标题请求使用库中存储的 Key、请求体不带 `tools`、标题会去除首尾空白并写入数据库；provider 未知时回退为 "New Chat"，不报错（与原行为一致）。
 
 ### Task 2.4 前端调用方
 
-- [ ] `chatStore` 的 `sendMessage` / `generateTitle` / 待生成标题队列只保存 `providerId + modelName`。
-- [ ] 快速对话、重新生成路径同步修改。
-- [ ] 全局搜索 `api_key`：只允许出现在供应商设置相关组件中。
+- [x] `chatStore` 新增 `ModelRunConfig = { providerId, modelName }`；`sendMessage`、`generateTitle`、`sessionRunConfigs`、`pendingTitleGenerations` 只保存这两个字段；`generateTitle` 改为 `(sessionId, config)`。
+- [x] `ChatInput`、`QuickChatApp`、`ChatHeader`、`SettingsApp`（从文档安装 CLI 的任务）同步修改；重新生成时改为按 `providerId` 找回原 provider，不再比对 `base_url`。
+- [x] 绑定已重新生成。新增前端测试：多个 provider 提供同名模型时，重新生成会选回原 provider（已通过临时改坏匹配逻辑确认该测试能拦住回归）。
+- [x] `grep -rn api_key frontend/src/store` 无结果；聊天相关代码不再读取 Key。
 
-**验收：** 修改供应商 Key 后无需重启即生效；`grep -rn api_key frontend/src/store` 无结果。
+**验收：** ✅ 后端凭据只来自数据库，改 Key 后下一轮对话就会用新 Key（由单元测试覆盖，尚未在打包后的应用里手动验证）；`wails3 task check` 通过（vitest 40 个文件、199 个用例；Go 30 个包）。
+
+**后续项（未包含在 M2 内）：**
+- [ ] 列表接口 `ListProviders` / `ProviderAndModelList` 仍会把 `api_key` 返回给前端，主窗口的设置引导（`useSettingsBootstrap`）和 `ChatHeader` 都会拿到 Key。要彻底收敛，需要让列表接口不再返回 Key，并给设置页的编辑视图单独提供读取 Key 的接口。
+- [ ] `service/plugin` 的 `loadDefaultChatModel` 每次调用都会 `storage.NewStorage()` 新开一次数据库连接，应改为注入共享的 storage；放到 M3 与 SQLite 连接配置一起处理。
+- [ ] 手动回归：在应用里修改 provider 的 Key 后立即发送消息，确认请求使用新 Key；分别验证快速对话、重新生成和从文档安装 CLI 的任务流程。
 
 ---
 

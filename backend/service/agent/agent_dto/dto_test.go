@@ -2,19 +2,16 @@ package agent_dto
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
-
-	"github.com/reatang/fire-poker/backend/pkg/provider"
 )
 
 func TestSendMessageInputJSONTags(t *testing.T) {
 	payload, err := json.Marshal(SendMessageInput{
 		SessionID:        7,
 		Content:          "hello",
-		BaseURL:          "https://api.example.com/v1",
-		ApiKey:           "secret",
+		ProviderID:       3,
 		ModelName:        "gpt-test",
-		ProviderType:     provider.OpenAiCompatibility,
 		EnabledUserTools: []string{"web_fetch", "code_exec"},
 	})
 	if err != nil {
@@ -25,16 +22,34 @@ func TestSendMessageInputJSONTags(t *testing.T) {
 	expectedFragments := []string{
 		`"session_id":7`,
 		`"content":"hello"`,
-		`"base_url":"https://api.example.com/v1"`,
-		`"api_key":"secret"`,
+		`"provider_id":3`,
 		`"model_name":"gpt-test"`,
-		`"provider_type":"openai_compatibility"`,
 		`"enabled_user_tools":["web_fetch","code_exec"]`,
 	}
 
 	for _, fragment := range expectedFragments {
 		if !containsJSONFragment(got, fragment) {
 			t.Fatalf("expected JSON payload to contain %s, got %s", fragment, got)
+		}
+	}
+}
+
+// TestModelSelectionInputsCarryNoCredentials guards against credentials leaking back into frontend-facing DTOs.
+func TestModelSelectionInputsCarryNoCredentials(t *testing.T) {
+	inputs := map[string]any{
+		"SendMessageInput":      SendMessageInput{ProviderID: 1, ModelName: "m"},
+		"GenerateTitleInput":    GenerateTitleInput{ProviderID: 1, ModelName: "m"},
+		"SpawnTaskSessionInput": SpawnTaskSessionInput{ProviderID: 1, ModelName: "m"},
+	}
+	for name, input := range inputs {
+		payload, err := json.Marshal(input)
+		if err != nil {
+			t.Fatalf("marshal %s: %v", name, err)
+		}
+		for _, forbidden := range []string{`"api_key"`, `"base_url"`, `"provider_type"`} {
+			if strings.Contains(string(payload), forbidden) {
+				t.Fatalf("%s must not carry %s, got %s", name, forbidden, payload)
+			}
 		}
 	}
 }

@@ -41,7 +41,7 @@ type Manager struct {
 	toolRegistry            toolkit.Manager
 	toolDependenciesVersion uint64
 	streamManager           *StreamManager
-	runners                 map[string]runner.Runner
+	runners                 *runnerCache
 	mcpManager              *pkgMCP.Manager
 	skillProvider           tools.SkillProvider
 	attention               tools.AttentionRequester
@@ -80,7 +80,7 @@ func NewManager(istorage *storage.Storage) *Manager {
 		istorage:           istorage,
 		toolRegistry:       toolkit.NewRegistry(),
 		streamManager:      NewStreamManager(),
-		runners:            make(map[string]runner.Runner),
+		runners:            newRunnerCache(maxCachedRunners),
 		mcpManager:         pkgMCP.NewManager(mustDataDir()),
 		toolConfirmDecider: defaultToolConfirmDecider,
 		memoryEncodeSem:    make(chan struct{}, 2),
@@ -98,7 +98,7 @@ func (m *Manager) SetApp(app *application.App) {
 	defer m.mu.Unlock()
 	m.wailsApp = app
 	m.toolDependenciesVersion++
-	clear(m.runners)
+	m.runners.clear()
 }
 
 // ToolRegistry exposes the catalog and registration contract without its concrete implementation.
@@ -130,7 +130,7 @@ func (m *Manager) SetSkillProvider(provider tools.SkillProvider) {
 	defer m.mu.Unlock()
 	m.skillProvider = provider
 	m.toolDependenciesVersion++
-	clear(m.runners)
+	m.runners.clear()
 }
 
 // SkillProvider returns the currently configured skill provider, or nil.
@@ -146,7 +146,7 @@ func (m *Manager) SetAttentionRequester(requester tools.AttentionRequester) {
 	defer m.mu.Unlock()
 	m.attention = requester
 	m.toolDependenciesVersion++
-	clear(m.runners)
+	m.runners.clear()
 }
 
 // SetSkillCreator stores the persistence layer used by ProposeSkill.
@@ -155,7 +155,7 @@ func (m *Manager) SetSkillCreator(creator tools.SkillCreator) {
 	defer m.mu.Unlock()
 	m.skillCreator = creator
 	m.toolDependenciesVersion++
-	clear(m.runners)
+	m.runners.clear()
 }
 
 // SetCliInstaller stores the CLI installer used by the InstallCli tool.
@@ -164,7 +164,7 @@ func (m *Manager) SetCliInstaller(i tools.CliInstaller) {
 	defer m.mu.Unlock()
 	m.cliInstaller = i
 	m.toolDependenciesVersion++
-	clear(m.runners)
+	m.runners.clear()
 }
 
 // SetCliInstallProgressReporter stores the progress reporter used by task install flows.
@@ -173,7 +173,7 @@ func (m *Manager) SetCliInstallProgressReporter(r tools.CliInstallProgressReport
 	defer m.mu.Unlock()
 	m.cliInstallProgress = r
 	m.toolDependenciesVersion++
-	clear(m.runners)
+	m.runners.clear()
 }
 
 // SetCliManifestGenerator stores the manifest generator used by the GenerateCliManifest tool.
@@ -182,7 +182,7 @@ func (m *Manager) SetCliManifestGenerator(g tools.CliManifestGenerator) {
 	defer m.mu.Unlock()
 	m.cliManifestGenerator = g
 	m.toolDependenciesVersion++
-	clear(m.runners)
+	m.runners.clear()
 }
 
 // SetCliCommandRunner stores the arbitrary CLI command runner used by the RunCliCommand tool.
@@ -191,7 +191,7 @@ func (m *Manager) SetCliCommandRunner(r tools.CliCommandRunner) {
 	defer m.mu.Unlock()
 	m.cliCommandRunner = r
 	m.toolDependenciesVersion++
-	clear(m.runners)
+	m.runners.clear()
 }
 
 // SetTerminalRunner supplies the shared terminal service used by shell tools.
@@ -200,7 +200,7 @@ func (m *Manager) SetTerminalRunner(r *pkgterminal.Manager) {
 	defer m.mu.Unlock()
 	m.terminalRunner = r
 	m.toolDependenciesVersion++
-	clear(m.runners)
+	m.runners.clear()
 }
 
 // SetToolConfirmDecider overrides the runtime approval decider used before tool execution.
@@ -227,43 +227,29 @@ func inferOpenAIVariant(providerType pkgProvider.Type) openai.Variant {
 	}
 }
 
-// GetOrCreateRunner caches scoped tool assemblies by model, session, catalog and service versions.
+// GetOrCreateRunner caches session-scoped tool assemblies by model, credentials, catalog and service versions.
 func (m *Manager) GetOrCreateRunner(
-	baseURL string,
-	apiKey string,
-	modelName string,
-	providerType pkgProvider.Type,
+	cfg ModelConfig,
 	enabledUserTools []string,
 	sessionKind string,
 	sessionID uint,
 ) (runner.Runner, error) {
-	m.mu.RLock()
-	key := fmt.Sprintf("%s|session:%d|catalog:%d|services:%d", runnerCacheKey(baseURL, modelName, providerType, enabledUserTools, sessionKind), sessionID, m.toolRegistry.Version(), m.toolDependenciesVersion)
-	if existing, ok := m.runners[key]; ok {
-		m.mu.RUnlock()
+	key := m.runnerKey(cfg, enabledUserTools, sessionKind, sessionID)
+	if existing, ok := m.runners.get(key); ok {
 		return existing, nil
 	}
-	legacyKey := fmt.Sprintf("%s/%s", baseURL, modelName)
-	// Legacy entries are explicit injected runners; newly constructed runners use scoped keys only.
-	if len(enabledUserTools) == 0 {
-		if existing, ok := m.runners[legacyKey]; ok {
-			m.mu.RUnlock()
-			return existing, nil
-		}
-	}
-	m.mu.RUnlock()
 
 	instruction, err := prompt.Load(prompt_id.MainAgent)
 	if err != nil {
 		instruction = defaultMainAgentPrompt
 	}
 
-	variant := inferOpenAIVariant(providerType)
+	variant := inferOpenAIVariant(cfg.ProviderType)
 
 	mdl := openai.New(
-		modelName,
-		openai.WithBaseURL(baseURL),
-		openai.WithAPIKey(apiKey),
+		cfg.ModelName,
+		openai.WithBaseURL(cfg.BaseURL),
+		openai.WithAPIKey(cfg.APIKey),
 		openai.WithVariant(variant),
 	)
 
@@ -294,21 +280,21 @@ func (m *Manager) GetOrCreateRunner(
 		runner.WithSessionService(m.sessionService),
 	)
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if existing, ok := m.runners[key]; ok {
-		return existing, nil
-	}
-	m.runners[key] = created
-	return created, nil
+	return m.runners.add(key, created), nil
 }
 
-// runnerCacheKey normalizes model configuration and optional tool selection.
-func runnerCacheKey(baseURL string, modelName string, providerType pkgProvider.Type, enabledUserTools []string, sessionKind string) string {
+// runnerKey identifies a runner by provider, credentials, model, tool selection, session and dependency versions.
+// The credential fingerprint makes an edited API key or base URL miss the cache instead of reusing a stale client.
+func (m *Manager) runnerKey(cfg ModelConfig, enabledUserTools []string, sessionKind string, sessionID uint) string {
 	names := slices.Clone(enabledUserTools)
 	slices.Sort(names)
 	selection, _ := json.Marshal(names)
-	return fmt.Sprintf("%s|%s|%s|%s|%s", baseURL, modelName, providerType, selection, sessionKind)
+	m.mu.RLock()
+	servicesVersion := m.toolDependenciesVersion
+	m.mu.RUnlock()
+	return fmt.Sprintf("provider:%d|cred:%s|model:%s|tools:%s|kind:%s|session:%d|catalog:%d|services:%d",
+		cfg.ProviderID, cfg.credentialFingerprint(), cfg.ModelName, selection, sessionKind, sessionID,
+		m.toolRegistry.Version(), servicesVersion)
 }
 
 func loadAgentConfig() (*data_models.Config, error) {

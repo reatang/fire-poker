@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	pkgAgent "github.com/reatang/fire-poker/backend/pkg/agent"
@@ -17,8 +19,6 @@ import (
 	pkgterminal "github.com/reatang/fire-poker/backend/pkg/terminal"
 	"github.com/reatang/fire-poker/backend/service/agent/agent_dto"
 	"github.com/reatang/fire-poker/backend/storage"
-	"trpc.group/trpc-go/trpc-agent-go/event"
-	"trpc.group/trpc-go/trpc-agent-go/model"
 )
 
 // Agent exposes backend agent operations to the frontend.
@@ -83,10 +83,8 @@ func (a *Agent) SendMessage(ctx context.Context, input agent_dto.SendMessageInpu
 		Content:             input.Content,
 		SystemPrompt:        input.SystemPrompt,
 		PrimedSkill:         input.SkillName,
-		BaseURL:             input.BaseURL,
-		ApiKey:              input.ApiKey,
+		ProviderID:          input.ProviderID,
 		ModelName:           input.ModelName,
-		ProviderType:        input.ProviderType,
 		EnabledUserTools:    input.EnabledUserTools,
 		Attachments:         atts,
 	})
@@ -223,10 +221,8 @@ func (a *Agent) SpawnTaskSession(ctx context.Context, input agent_dto.SpawnTaskS
 			Content:      input.UserMessage,
 			SystemPrompt: input.SystemPrompt,
 			PrimedSkill:  input.SkillName,
-			BaseURL:      input.BaseURL,
-			ApiKey:       input.ApiKey,
+			ProviderID:   input.ProviderID,
 			ModelName:    input.ModelName,
-			ProviderType: input.ProviderType,
 		})
 	}()
 
@@ -295,9 +291,8 @@ func (a *Agent) ToggleStarSession(ctx context.Context, input agent_dto.ToggleSta
 	return &agent_dto.ToggleStarSessionOutput{}, nil
 }
 
+// GenerateTitle summarizes the opening turns into a session title with a single tool-free completion.
 func (a *Agent) GenerateTitle(ctx context.Context, input agent_dto.GenerateTitleInput) (*agent_dto.GenerateTitleOutput, error) {
-	fmt.Println("Generating title for session:", input.SessionID)
-
 	msgs, err := a.manager.Storage().ListMessagesForSession(input.SessionID, 0, 4)
 	if err != nil || len(msgs) == 0 {
 		return &agent_dto.GenerateTitleOutput{Title: "New Chat"}, nil
@@ -319,18 +314,24 @@ func (a *Agent) GenerateTitle(ctx context.Context, input agent_dto.GenerateTitle
 		return &agent_dto.GenerateTitleOutput{Title: "New Chat"}, nil
 	}
 
-	r, err := a.manager.GetOrCreateRunner(input.BaseURL, input.ApiKey, input.ModelName, input.ProviderType, nil, "user", input.SessionID)
+	cfg, err := a.manager.ResolveModelConfig(input.ProviderID, input.ModelName)
 	if err != nil {
+		log.Printf("generate title for session %d: %v", input.SessionID, err)
 		return &agent_dto.GenerateTitleOutput{Title: "New Chat"}, nil
 	}
 
-	titlePrompt := buildTitlePrompt(preview.String())
-	events, err := r.Run(ctx, "local", fmt.Sprintf("title-%d", input.SessionID), model.NewUserMessage(titlePrompt))
+	// A oneshot call binds no tools and creates no SDK session, so nothing lingers after the title returns.
+	resp, err := pkgAgent.OneshotComplete(ctx, cfg.ApplyTo(pkgAgent.OneshotRequest{
+		User:      buildTitlePrompt(preview.String()),
+		MaxTokens: titleMaxTokens,
+		Timeout:   titleTimeout,
+	}))
 	if err != nil {
+		log.Printf("generate title for session %d: %v", input.SessionID, err)
 		return &agent_dto.GenerateTitleOutput{Title: "New Chat"}, nil
 	}
 
-	result := collectTitleFromEvents(events)
+	result := strings.TrimSpace(resp.Text)
 	if result == "" {
 		result = "New Chat"
 	}
@@ -339,31 +340,10 @@ func (a *Agent) GenerateTitle(ctx context.Context, input agent_dto.GenerateTitle
 	return &agent_dto.GenerateTitleOutput{Title: result}, nil
 }
 
-func collectTitleFromEvents(events <-chan *event.Event) string {
-	var streamedTitle strings.Builder
-	var finalTitle string
-
-	for evt := range events {
-		if evt == nil || evt.Error != nil {
-			continue
-		}
-		for _, choice := range evt.Choices {
-			if choice.Delta.Content != "" {
-				streamedTitle.WriteString(choice.Delta.Content)
-			}
-			if finalTitle == "" && choice.Message.Content != "" {
-				finalTitle = choice.Message.Content
-			}
-		}
-	}
-
-	result := strings.TrimSpace(streamedTitle.String())
-	if result != "" {
-		return result
-	}
-
-	return strings.TrimSpace(finalTitle)
-}
+const (
+	titleMaxTokens = 64
+	titleTimeout   = 30 * time.Second
+)
 
 func buildTitlePrompt(preview string) string {
 	titleInstruction, err := prompt.Load(prompt_id.GenChatTitle)

@@ -3,7 +3,6 @@ import { preferredModel } from '@/lib/modelSelection'
 import { useModelSelectionStore } from './modelSelectionStore'
 import { Events } from '@wailsio/runtime'
 import { Agent as AgentBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/agent'
-import type { Type as ProviderType } from '@bindings/github.com/reatang/fire-poker/backend/pkg/provider/models'
 import type {
   Attachment,
   ConfirmRequestEvent,
@@ -25,13 +24,13 @@ type PendingStreamingPatch = {
   contentSnapshot?: string
   thinkingSnapshot?: string
 }
-type PendingTitleGeneration = {
-  baseUrl: string
-  apiKey: string
+// Only the provider identity is kept in the store; the backend resolves its credentials.
+export type ModelRunConfig = {
+  providerId: number
   modelName: string
-  providerType: ProviderType
 }
-type TitleGenerationConfig = PendingTitleGeneration
+type PendingTitleGeneration = ModelRunConfig
+type TitleGenerationConfig = ModelRunConfig
 
 interface ChatStore {
   conversations: Conversation[]
@@ -69,10 +68,8 @@ interface ChatStore {
     regenerateMessageId?: number
     sessionId: number
     content: string
-    baseUrl: string
-    apiKey: string
+    providerId: number
     modelName: string
-    providerType: ProviderType
     enabledUserTools: string[]
     attachments: Attachment[]
     systemPrompt?: string
@@ -85,13 +82,7 @@ interface ChatStore {
     message: string,
     action?: 'approve' | 'reject' | 'comment'
   ) => Promise<void>
-  generateTitle: (
-    sessionId: number,
-    baseUrl: string,
-    apiKey: string,
-    modelName: string,
-    providerType: ProviderType
-  ) => Promise<void>
+  generateTitle: (sessionId: number, config: ModelRunConfig) => Promise<void>
   generateTitleDraft: (sessionId: number, fallbackConfig?: TitleGenerationConfig) => Promise<string | null>
   initEventListeners: () => () => void
 }
@@ -560,13 +551,12 @@ export const useChatStore = create<ChatStore>()((set, get) => {
     const providers = (result?.provider_models ?? []).filter(p => p.provider.enabled)
     const previous = state.sessionRunConfigs[sessionId]
     const original = providers.flatMap(p => p.models.filter(m => m.enable && m.model === response.modelName).map(m => ({p, m})))
-    const matching = original.find(x => x.p.provider.base_url === previous?.baseUrl) ?? original[0]
+    const matching = original.find(x => x.p.provider.id === previous?.providerId) ?? original[0]
     const selected = matching?.m ?? preferredModel(providers, useModelSelectionStore.getState())
     const provider = matching?.p ?? providers.find(p => p.models.some(m => m.id === selected?.id))
     if (!provider || !selected) throw new Error('没有可用的模型，请先配置提供商')
     await get().sendMessage({sessionId, regenerateMessageId: responseId, content: question.content,
-      attachments: question.attachments ?? [], baseUrl: provider.provider.base_url, apiKey: provider.provider.api_key,
-      modelName: selected.model, providerType: provider.provider.provider_type,
+      attachments: question.attachments ?? [], providerId: provider.provider.id, modelName: selected.model,
       enabledUserTools: await get().loadSessionTools(sessionId)})
   },
 
@@ -637,10 +627,8 @@ export const useChatStore = create<ChatStore>()((set, get) => {
       sessionRunConfigs: {
         ...state.sessionRunConfigs,
         [params.sessionId]: {
-          baseUrl: params.baseUrl,
-          apiKey: params.apiKey,
+          providerId: params.providerId,
           modelName: params.modelName,
-          providerType: params.providerType,
         },
       },
       streamingMessages: {
@@ -651,10 +639,8 @@ export const useChatStore = create<ChatStore>()((set, get) => {
         ...state.pendingTitleGenerations,
         [params.sessionId]: isFirstMessage
           ? {
-              baseUrl: params.baseUrl,
-              apiKey: params.apiKey,
+              providerId: params.providerId,
               modelName: params.modelName,
-              providerType: params.providerType,
             }
           : state.pendingTitleGenerations[params.sessionId],
       },
@@ -667,10 +653,8 @@ export const useChatStore = create<ChatStore>()((set, get) => {
         content: params.content,
         system_prompt: params.systemPrompt ?? '',
         skill_name: params.skillName ?? '',
-        base_url: params.baseUrl,
-        api_key: params.apiKey,
+        provider_id: params.providerId,
         model_name: params.modelName,
-        provider_type: params.providerType,
         enabled_user_tools: params.enabledUserTools,
         attachments: params.attachments.map(att => ({
           path: att.path,
@@ -734,13 +718,11 @@ export const useChatStore = create<ChatStore>()((set, get) => {
     }))
   },
 
-  generateTitle: async (sessionId, baseUrl, apiKey, modelName, providerType) => {
+  generateTitle: async (sessionId, config) => {
     const result = await AgentBinding.GenerateTitle({
       session_id: sessionId,
-      base_url: baseUrl,
-      api_key: apiKey,
-      model_name: modelName,
-      provider_type: providerType,
+      provider_id: config.providerId,
+      model_name: config.modelName,
     })
     if (!result?.title) return
 
@@ -757,10 +739,8 @@ export const useChatStore = create<ChatStore>()((set, get) => {
 
     const result = await AgentBinding.GenerateTitle({
       session_id: sessionId,
-      base_url: runConfig.baseUrl,
-      api_key: runConfig.apiKey,
+      provider_id: runConfig.providerId,
       model_name: runConfig.modelName,
-      provider_type: runConfig.providerType,
     })
 
     return result?.title?.trim() || null
@@ -1035,13 +1015,7 @@ export const useChatStore = create<ChatStore>()((set, get) => {
               [data.sessionId]: undefined,
             },
           }))
-          void get().generateTitle(
-            data.sessionId,
-            pendingTitleGeneration.baseUrl,
-            pendingTitleGeneration.apiKey,
-            pendingTitleGeneration.modelName,
-            pendingTitleGeneration.providerType
-          )
+          void get().generateTitle(data.sessionId, pendingTitleGeneration)
         }
 
         if (data.sessionId === get().currentConversationId && shouldFinalizeCurrentConversation) {

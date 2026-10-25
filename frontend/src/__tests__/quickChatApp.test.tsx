@@ -264,10 +264,8 @@ describe('QuickChatApp', () => {
       expect(AgentBinding.SendMessage).toHaveBeenCalledWith(expect.objectContaining({
         session_id: 42,
         content: 'Summarize the plan',
-        base_url: 'http://x',
-        api_key: 'k',
+        provider_id: 1,
         model_name: 'm',
-        provider_type: 'aliyun',
         enabled_user_tools: [],
         attachments: [],
       }))
