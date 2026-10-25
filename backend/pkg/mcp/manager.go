@@ -155,7 +155,7 @@ func (m *Manager) DiscoverTools(ctx context.Context, item data_models.ExtensionI
 	}
 	defer toolSet.Close()
 
-	if initToolSet, ok := toolSet.(*toolmcp.ToolSet); ok {
+	if initToolSet, ok := toolSet.(interface{ Init(context.Context) error }); ok {
 		if err := initToolSet.Init(ctx); err != nil {
 			return nil, err
 		}
@@ -194,11 +194,29 @@ func (m *Manager) BuildToolSet(item data_models.ExtensionItem, enabledToolIDs []
 	}
 
 	safeToolSetName := mcpToolSetName(item.ID)
+	filter, includeAll := toolFilterFor(item, safeToolSetName, enabledToolIDs)
+	if filter == nil && !includeAll {
+		return emptyToolSet{name: item.ID}, nil
+	}
+
+	if config.Transport == "stdio" {
+		return newStdioToolSet(safeToolSetName, config, filter), nil
+	}
 	options := []toolmcp.ToolSetOption{toolmcp.WithName(safeToolSetName)}
+	if filter != nil {
+		options = append(options, toolmcp.WithToolFilterFunc(filter))
+	}
+	return toolmcp.NewMCPToolSet(config.toToolSetConfig(), options...), nil
+}
+
+// toolFilterFor maps selected tool ids to a raw-name filter. includeAll is true when
+// no selection was given or the whole server was selected; a nil filter with
+// includeAll false means none of this server's tools were selected.
+func toolFilterFor(item data_models.ExtensionItem, safeToolSetName string, enabledToolIDs []string) (agenttool.FilterFunc, bool) {
 	if len(enabledToolIDs) > 0 {
 		for _, toolID := range enabledToolIDs {
 			if toolID == item.ID {
-				return toolmcp.NewMCPToolSet(config.toToolSetConfig(), options...), nil
+				return nil, true
 			}
 		}
 
@@ -214,12 +232,11 @@ func (m *Manager) BuildToolSet(item data_models.ExtensionItem, enabledToolIDs []
 			}
 		}
 		if len(rawNames) == 0 {
-			return emptyToolSet{name: item.ID}, nil
+			return nil, false
 		}
-		options = append(options, toolmcp.WithToolFilterFunc(agenttool.NewIncludeToolNamesFilter(rawNames...)))
+		return agenttool.NewIncludeToolNamesFilter(rawNames...), false
 	}
-
-	return toolmcp.NewMCPToolSet(config.toToolSetConfig(), options...), nil
+	return nil, true
 }
 
 type emptyToolSet struct {
