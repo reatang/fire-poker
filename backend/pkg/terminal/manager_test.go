@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -49,10 +51,19 @@ func writeTerminalTestScript(t *testing.T, body string) string {
 // TestManagerCreateWriteAndPersistOutput verifies PTY output is persisted.
 func TestManagerCreateWriteAndPersistOutput(t *testing.T) {
 	stor := newTerminalTestStorage(t)
+	// The drain goroutine appends events while the test goroutine reads them on failure.
+	var emittedMu sync.Mutex
 	var emitted []OutputEvent
 	mgr := NewManager(stor, func(event OutputEvent) {
+		emittedMu.Lock()
+		defer emittedMu.Unlock()
 		emitted = append(emitted, event)
 	})
+	emittedSnapshot := func() []OutputEvent {
+		emittedMu.Lock()
+		defer emittedMu.Unlock()
+		return slices.Clone(emitted)
+	}
 	script := writeTerminalTestScript(t, `echo "ready"; read line; echo "got:$line"`)
 
 	info, err := mgr.Create(context.Background(), CreateParams{
@@ -68,25 +79,29 @@ func TestManagerCreateWriteAndPersistOutput(t *testing.T) {
 		t.Fatal("expected terminal id")
 	}
 
-	if !eventually(2*time.Second, func() bool {
+	if !eventually(terminalOutputTimeout, func() bool {
 		chunks, err := stor.ReadTerminalOutput(info.ID, 0)
 		return err == nil && strings.Contains(joinChunks(chunks), "ready")
 	}) {
-		t.Fatalf("expected ready output, events=%+v", emitted)
+		t.Fatalf("expected ready output, events=%+v", emittedSnapshot())
 	}
 
 	if err := mgr.Write(info.ID, "lemon\n"); err != nil {
 		t.Fatalf("write terminal: %v", err)
 	}
 
-	if !eventually(2*time.Second, func() bool {
+	if !eventually(terminalOutputTimeout, func() bool {
 		chunks, err := stor.ReadTerminalOutput(info.ID, 0)
 		return err == nil && strings.Contains(joinChunks(chunks), "got:lemon")
 	}) {
 		chunks, _ := stor.ReadTerminalOutput(info.ID, 0)
-		t.Fatalf("expected persisted stdin response, got %q events=%+v", joinChunks(chunks), emitted)
+		t.Fatalf("expected persisted stdin response, got %q events=%+v", joinChunks(chunks), emittedSnapshot())
 	}
 }
+
+// terminalOutputTimeout bounds PTY output polling; a full `go test ./backend/...` run
+// has been measured delaying the first chunk past 3s, so 2s was too tight.
+const terminalOutputTimeout = 10 * time.Second
 
 // eventually polls a condition until it passes or a timeout is reached.
 func eventually(timeout time.Duration, fn func() bool) bool {
