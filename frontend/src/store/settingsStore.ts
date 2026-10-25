@@ -14,10 +14,6 @@ type LocaleDraft = {
   language: Language
 }
 
-type FileDraft = {
-  dataDir: string
-}
-
 type ShortcutDraft = {
   quickChatShortcut: string
 }
@@ -48,12 +44,10 @@ type SettingsState = {
   regions: SettingsOption[]
   displayDraft: DisplayDraft
   localeDraft: LocaleDraft
-  fileDraft: FileDraft
   shortcutDraft: ShortcutDraft
   shortcutValidation: ShortcutValidation
   displayDirty: boolean
   localeDirty: boolean
-  fileDirty: boolean
   shortcutDirty: boolean
   setProviders: (providers: SettingsBootstrap['providers']) => void
   setExtensions: (extensions: ExtensionItem[]) => void
@@ -77,7 +71,6 @@ type SettingsState = {
   applyShortcutSettings: (quickChatShortcut: string) => void
   setDisplayDraft: (draft: Partial<DisplayDraft>) => void
   setLocaleDraft: (draft: Partial<LocaleDraft>) => void
-  setFileDraft: (draft: Partial<FileDraft>) => void
   setShortcutDraft: (draft: Partial<ShortcutDraft>) => void
   setShortcutValidation: (validation: ShortcutValidation) => void
 }
@@ -103,12 +96,10 @@ const createSettingsState: StateCreator<SettingsState> = (set) => ({
     regions: [],
     displayDraft: { fontSize: 'md' },
     localeDraft: { locale: 'zh-CN', language: 'zh-CN' },
-    fileDraft: { dataDir: '' },
     shortcutDraft: { quickChatShortcut: 'CmdOrCtrl+Shift+Space' },
     shortcutValidation: { status: 'idle', message: '' },
     displayDirty: false,
     localeDirty: false,
-    fileDirty: false,
     shortcutDirty: false,
     hydrate: (payload) => set((state) => ({
       locale: payload.locale,
@@ -128,12 +119,10 @@ const createSettingsState: StateCreator<SettingsState> = (set) => ({
       regions: payload.regions ?? [],
       displayDraft: { fontSize: payload.font_size },
       localeDraft: { locale: payload.locale, language: payload.language },
-      fileDraft: { dataDir: payload.data_dir },
       shortcutDraft: { quickChatShortcut: payload.quick_chat_shortcut || 'CmdOrCtrl+Shift+Space' },
       shortcutValidation: { status: 'idle', message: '' },
       displayDirty: false,
       localeDirty: false,
-      fileDirty: false,
       shortcutDirty: false,
     })),
     setActiveTab: (tab) => set({ activeTab: tab }),
@@ -173,13 +162,6 @@ const createSettingsState: StateCreator<SettingsState> = (set) => ({
       return {
         localeDraft: nextDraft,
         localeDirty: nextDraft.locale !== state.locale || nextDraft.language !== state.language,
-      }
-    }),
-    setFileDraft: (draft) => set((state) => {
-      const nextDraft = { ...state.fileDraft, ...draft }
-      return {
-        fileDraft: nextDraft,
-        fileDirty: nextDraft.dataDir !== state.dataDir,
       }
     }),
     setShortcutDraft: (draft) => set((state) => {

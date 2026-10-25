@@ -82,6 +82,24 @@ Fire Poker 从设计上支持扩展：
 - Linux
 - 实验性的 iOS / Android 构建脚手架
 
+## 数据位置
+
+所有平台都把数据保存在家目录下的 `~/.fire-poker`（Windows 为 `%USERPROFILE%\.fire-poker`），也可以在应用的「设置 → 数据管理」中查看完整路径并直接打开。
+
+| 位置 | 内容 |
+| --- | --- |
+| `config.json` | 应用设置与扩展列表 |
+| `data.db` | 供应商、对话、消息、记忆 |
+| `skills/` | 用户 Skills |
+| `plugins/` | MCP、插件、CLI 工具及其数据 |
+| `logs/` | 按天切分的运行日志，保留 14 天 |
+| `cache/` | Node 运行时、Windows WebView2 数据，可随时删除 |
+
+- 备份或迁移：退出应用后复制整个 `~/.fire-poker` 目录。
+- 彻底清除：删除 `~/.fire-poker`；macOS 还需删除 `~/Library/WebKit/com.reatang.fire-poker` 与 `~/Library/Caches/com.reatang.fire-poker`。
+- 自定义位置：设置环境变量 `FIRE_POKER_DATA_DIR`，Windows 便携版即使用此方式。
+- 开发构建（`wails3 dev` 等不带 `production` 标签的构建）使用独立的 `~/.fire-poker-dev`，不会改动正式版数据。
+
 ## 技术栈
 
 - 桌面框架：Wails 3

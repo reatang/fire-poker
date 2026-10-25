@@ -47,7 +47,7 @@ func runtimeBaseDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dataDir, NodeSubdir), nil
+	return dir.NodeRuntimeRoot(dataDir), nil
 }
 
 // runtimeStatePath returns the absolute path to the state.json file.

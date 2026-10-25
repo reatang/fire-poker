@@ -1,7 +1,5 @@
 import { Settings } from '@bindings/github.com/reatang/fire-poker/backend/service/settings'
-import { File } from '@bindings/github.com/reatang/fire-poker/backend/service/file'
 import { DisplaySettingsView } from '@/components/settings/general/DisplaySettingsView'
-import { FileSettingsView } from '@/components/settings/general/FileSettingsView'
 import { LocaleSettingsView } from '@/components/settings/general/LocaleSettingsView'
 import { ShortcutSettingsView } from '@/components/settings/general/ShortcutSettingsView'
 import { useAppStore } from '@/store/appStore'
@@ -10,21 +8,17 @@ import { useSettingsStore } from '@/store/settingsStore'
 export function GeneralSettingsPanel() {
   const generalTab = useSettingsStore((state) => state.generalTab)
   const fontSize = useSettingsStore((state) => state.fontSize)
-  const dataDir = useSettingsStore((state) => state.dataDir)
   const quickChatShortcut = useSettingsStore((state) => state.quickChatShortcut)
   const displayDraft = useSettingsStore((state) => state.displayDraft)
   const localeDraft = useSettingsStore((state) => state.localeDraft)
-  const fileDraft = useSettingsStore((state) => state.fileDraft)
   const shortcutDraft = useSettingsStore((state) => state.shortcutDraft)
   const localeDirty = useSettingsStore((state) => state.localeDirty)
-  const fileDirty = useSettingsStore((state) => state.fileDirty)
   const shortcutDirty = useSettingsStore((state) => state.shortcutDirty)
   const shortcutValidation = useSettingsStore((state) => state.shortcutValidation)
   const languages = useSettingsStore((state) => state.languages)
   const regions = useSettingsStore((state) => state.regions)
   const setDisplayDraft = useSettingsStore((state) => state.setDisplayDraft)
   const setLocaleDraft = useSettingsStore((state) => state.setLocaleDraft)
-  const setFileDraft = useSettingsStore((state) => state.setFileDraft)
   const setShortcutDraft = useSettingsStore((state) => state.setShortcutDraft)
   const setShortcutValidation = useSettingsStore((state) => state.setShortcutValidation)
   const applyDisplaySettings = useSettingsStore((state) => state.applyDisplaySettings)
@@ -48,23 +42,6 @@ export function GeneralSettingsPanel() {
           applyLocaleSettings({ locale: localeDraft.locale, language: localeDraft.language })
           setLanguage(localeDraft.language)
         }}
-      />
-    )
-  }
-
-  if (generalTab === 'file') {
-    return (
-      <FileSettingsView
-        dataDir={fileDraft.dataDir}
-        currentDataDir={dataDir}
-        dirty={fileDirty}
-        onSelectFolder={async () => {
-          const result = await File.SelectFolder({ folder_path: fileDraft.dataDir })
-          if (result?.folder_path) {
-            setFileDraft({ dataDir: result.folder_path })
-          }
-        }}
-        onApply={() => undefined}
       />
     )
   }

@@ -2,7 +2,6 @@ package settings
 
 import (
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/reatang/fire-poker/backend/pkg/dir"
 	"github.com/reatang/fire-poker/backend/pkg/global_hotkey"
 	"github.com/reatang/fire-poker/backend/pkg/ierror"
+	"github.com/reatang/fire-poker/backend/service/settings/settings_dto"
 )
 
 // loadConfig reads the current config file and returns default values when it does not exist yet.
@@ -81,20 +81,29 @@ func defaultConfig(dataDir string) *data_models.Config {
 	}
 }
 
-// copyFile copies one file to another path, creating the target file with standard app permissions.
-func copyFile(sourcePath string, targetPath string) error {
-	sourceFile, err := os.Open(sourcePath)
-	if err != nil {
-		return ierror.Error(ierror.ErrSettingsCopyFile, err)
+// buildDataDirectoryItems lists app-owned locations in display order; macOS adds the WebKit stores the system keeps outside dataDir.
+func buildDataDirectoryItems(dataDir string, goos string, homeDir string, tempDir string) []settings_dto.DataDirectoryItem {
+	folder := func(id string, path string) settings_dto.DataDirectoryItem {
+		return settings_dto.DataDirectoryItem{ID: id, Path: path, RevealDir: path}
 	}
-	defer sourceFile.Close()
-
-	targetFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
-	if err != nil {
-		return ierror.Error(ierror.ErrSettingsCopyFile, err)
+	file := func(id string, path string) settings_dto.DataDirectoryItem {
+		return settings_dto.DataDirectoryItem{ID: id, Path: path, RevealDir: filepath.Dir(path), IsFile: true}
 	}
-	defer targetFile.Close()
 
-	_, err = io.Copy(targetFile, sourceFile)
-	return ierror.Error(ierror.ErrSettingsCopyFile, err)
+	items := []settings_dto.DataDirectoryItem{
+		folder("data_root", dataDir),
+		file("config", filepath.Join(dataDir, dir.ConfigFileName)),
+		file("database", filepath.Join(dataDir, dir.DataBaseFileName)),
+		folder("skills", dir.SkillsRoot(dataDir)),
+		folder("plugins", dir.ExtensionsRoot(dataDir)),
+		folder("logs", dir.LogsRoot(dataDir)),
+		folder("cache", dir.CacheRoot(dataDir)),
+	}
+	if goos == "darwin" && homeDir != "" {
+		items = append(items,
+			folder("webview_data", filepath.Join(homeDir, "Library", "WebKit", dir.BundleIdentifier)),
+			folder("webview_cache", filepath.Join(homeDir, "Library", "Caches", dir.BundleIdentifier)),
+		)
+	}
+	return append(items, folder("temp", tempDir))
 }

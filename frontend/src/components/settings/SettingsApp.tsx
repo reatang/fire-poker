@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Globe2, Keyboard, Languages, MonitorSmartphone } from 'lucide-react'
+import { Keyboard, Languages, MonitorSmartphone } from 'lucide-react'
 import { Events } from '@wailsio/runtime'
 import { AboutSettingsView } from '@/components/settings/about/AboutSettingsView'
+import { DataManagementView } from '@/components/settings/data/DataManagementView'
 import { SettingsShell } from '@/components/settings/SettingsShell'
 import { SettingsSectionLayout } from '@/components/settings/common/SettingsSectionLayout'
 import { SettingsSubmenuList } from '@/components/settings/common/SettingsSubmenuList'
@@ -194,12 +195,11 @@ export function SettingsApp() {
     { key: 'display' as const, label: t('settingsPage.general.display.title'), icon: <MonitorSmartphone size={16} /> },
     { key: 'locale' as const, label: t('settingsPage.general.locale.title'), icon: <Languages size={16} /> },
     { key: 'shortcuts' as const, label: t('settingsPage.general.shortcuts.title'), icon: <Keyboard size={16} /> },
-    { key: 'file' as const, label: t('settingsPage.general.file.title'), icon: <Globe2 size={16} className="rotate-45" /> },
   ]
 
   useEffect(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
-    if (tab === 'general' || tab === 'providers' || tab === 'plugins' || tab === 'skills' || tab === 'memory' || tab === 'about') {
+    if (tab === 'general' || tab === 'providers' || tab === 'plugins' || tab === 'skills' || tab === 'memory' || tab === 'data' || tab === 'about') {
       setActiveTab(tab)
     }
   }, [setActiveTab])
@@ -357,7 +357,13 @@ export function SettingsApp() {
 
   let content: ReactNode
 
-  if (activeTab === 'about') {
+  if (activeTab === 'data') {
+    content = (
+      <SettingsSectionLayout>
+        <DataManagementView />
+      </SettingsSectionLayout>
+    )
+  } else if (activeTab === 'about') {
     content = (
       <SettingsSectionLayout>
         <AboutSettingsView version={version} />

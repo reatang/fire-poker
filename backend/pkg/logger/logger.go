@@ -89,12 +89,54 @@ func (l *Logger) write(label string, level int, message string) error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	now := l.now()
+	return l.appendLocked(now, fmt.Sprintf("%s [%s] %s\n", now.Format(time.RFC3339), label, message))
+}
+
+// Write implements io.Writer so the standard library logger can mirror its already formatted lines into the daily file.
+func (l *Logger) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if err := l.appendLocked(l.now(), string(p)); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+// Prune deletes daily log files older than keepDays; files that do not follow the daily naming are left alone.
+func (l *Logger) Prune(keepDays int) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	entries, err := os.ReadDir(filepath.Join(l.dataDir, "logs"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	now := l.now()
+	cutoff := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, -keepDays)
+	for _, entry := range entries {
+		day, err := time.ParseInLocation("2006-01-02.log", entry.Name(), now.Location())
+		if err != nil || entry.IsDir() || !day.Before(cutoff) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(l.dataDir, "logs", entry.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// appendLocked appends raw text to the daily file for now; callers must hold l.mu.
+func (l *Logger) appendLocked(now time.Time, text string) error {
 	logDir := filepath.Join(l.dataDir, "logs")
 	if err := os.MkdirAll(logDir, l.dirMode); err != nil {
 		return err
 	}
 
-	now := l.now()
 	logPath := filepath.Join(logDir, fmt.Sprintf("%s.log", now.Format("2006-01-02")))
 	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, l.fileMode)
 	if err != nil {
@@ -102,8 +144,7 @@ func (l *Logger) write(label string, level int, message string) error {
 	}
 	defer file.Close()
 
-	line := fmt.Sprintf("%s [%s] %s\n", now.Format(time.RFC3339), label, message)
-	_, err = file.WriteString(line)
+	_, err = file.WriteString(text)
 	return err
 }
 

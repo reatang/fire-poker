@@ -4,10 +4,26 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
+	"testing"
 )
 
-// defaultBaseDirName defines the default name of the base directory used for storing application data.
-const defaultBaseDirName = ".fire-poker"
+// isolateTests keeps test binaries away from the real data directory unless a test opts back in.
+var isolateTests = testing.Testing()
+
+var (
+	testDataDirOnce sync.Once
+	testDataDirPath string
+	testDataDirErr  error
+)
+
+// testDataDir returns one throwaway data directory shared by the current test process.
+func testDataDir() (string, error) {
+	testDataDirOnce.Do(func() {
+		testDataDirPath, testDataDirErr = os.MkdirTemp("", "fire-poker-test-")
+	})
+	return testDataDirPath, testDataDirErr
+}
 
 // ConfigFileName defines the name of the configuration file.
 const ConfigFileName = "config.json"
@@ -28,9 +44,11 @@ func GetDefaultBaseDir() (string, error) {
 	dataPath := filepath.Join(homeDir, defaultBaseDirName)
 	// Reuse an existing installation in place: config and plugin paths may be absolute.
 	if _, err := os.Stat(dataPath); os.IsNotExist(err) {
-		legacy := filepath.Join(homeDir, ".lemontea")
-		if info, legacyErr := os.Stat(legacy); legacyErr == nil && info.IsDir() {
-			return legacy, nil
+		for _, name := range legacyBaseDirNames {
+			legacy := filepath.Join(homeDir, name)
+			if info, legacyErr := os.Stat(legacy); legacyErr == nil && info.IsDir() {
+				return legacy, nil
+			}
 		}
 	}
 	if err := os.MkdirAll(dataPath, 0o755); err != nil {
@@ -71,22 +89,7 @@ func ReadLocatorDataDir() (string, error) {
 	return locator.DataDir, nil
 }
 
-// WriteLocatorDataDir persists the active custom data directory inside the stable home-based metadata folder.
-func WriteLocatorDataDir(dataDir string) error {
-	locatorPath, err := GetLocatorFilePath()
-	if err != nil {
-		return err
-	}
-
-	content, err := json.Marshal(dataDirLocator{DataDir: dataDir})
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(locatorPath, content, 0o644)
-}
-
-// GetDataDir get the data storage directory
+// GetDataDir resolves the data directory: env override, then legacy locator file, then the home-based default.
 func GetDataDir() (string, error) {
 	configuredDir := os.Getenv("FIRE_POKER_DATA_DIR")
 	if configuredDir == "" {
@@ -97,6 +100,9 @@ func GetDataDir() (string, error) {
 			return "", err
 		}
 		return configuredDir, nil
+	}
+	if isolateTests {
+		return testDataDir()
 	}
 
 	locatorDir, err := ReadLocatorDataDir()
@@ -182,4 +188,45 @@ const SkillsSubdirName = "skills"
 // SkillsRoot returns the skills root: {dataDir}/skills.
 func SkillsRoot(dataDir string) string {
 	return filepath.Join(dataDir, SkillsSubdirName)
+}
+
+// CacheSubdirName is the directory for re-creatable data such as the Node runtime and WebView storage.
+const CacheSubdirName = "cache"
+
+// LogsSubdirName is the directory for daily log files.
+const LogsSubdirName = "logs"
+
+// CacheRoot returns the cache root: {dataDir}/cache. Everything below it can be deleted safely.
+func CacheRoot(dataDir string) string {
+	return filepath.Join(dataDir, CacheSubdirName)
+}
+
+// LogsRoot returns the log directory: {dataDir}/logs.
+func LogsRoot(dataDir string) string {
+	return filepath.Join(dataDir, LogsSubdirName)
+}
+
+// NodeRuntimeRoot returns the bundled Node runtime directory: {dataDir}/cache/runtime/node.
+func NodeRuntimeRoot(dataDir string) string {
+	return filepath.Join(CacheRoot(dataDir), "runtime", "node")
+}
+
+// LegacyNodeRuntimeRoot returns the pre-cache Node runtime directory: {dataDir}/runtime/node.
+func LegacyNodeRuntimeRoot(dataDir string) string {
+	return filepath.Join(dataDir, "runtime", "node")
+}
+
+// WebViewDataRoot returns the Windows WebView2 user data directory: {dataDir}/cache/webview2.
+func WebViewDataRoot(dataDir string) string {
+	return filepath.Join(CacheRoot(dataDir), "webview2")
+}
+
+// LegacyWebViewDataRoot returns the pre-cache WebView2 user data directory: {dataDir}/webview2.
+func LegacyWebViewDataRoot(dataDir string) string {
+	return filepath.Join(dataDir, "webview2")
+}
+
+// TempRoot returns the temp directory for attachment copies: {os.TempDir()}/fire-poker. It is cleared on startup.
+func TempRoot() string {
+	return filepath.Join(os.TempDir(), "fire-poker")
 }

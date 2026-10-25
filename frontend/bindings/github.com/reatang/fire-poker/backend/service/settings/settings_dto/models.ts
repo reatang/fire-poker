@@ -9,41 +9,104 @@ import { Create as $Create } from "@wailsio/runtime";
 // @ts-ignore: Unused imports
 import * as view_model$0 from "../../../models/view_model/models.js";
 
-export class ApplyFileSettingsInput {
-    "target_dir": string;
+/**
+ * DataDirectoryItem describes one location Fire Poker reads or writes, shown read-only in data management.
+ */
+export class DataDirectoryItem {
+    /**
+     * stable key used by the frontend for labels
+     */
+    "id": string;
 
-    /** Creates a new ApplyFileSettingsInput instance. */
-    constructor($$source: Partial<ApplyFileSettingsInput> = {}) {
-        if (!("target_dir" in $$source)) {
-            this["target_dir"] = "";
+    /**
+     * absolute path of the file or directory
+     */
+    "path": string;
+
+    /**
+     * directory opened by "show in file manager"
+     */
+    "reveal_dir": string;
+
+    /**
+     * whether Path is a single file
+     */
+    "is_file": boolean;
+
+    /**
+     * whether Path currently exists on disk
+     */
+    "exists": boolean;
+
+    /** Creates a new DataDirectoryItem instance. */
+    constructor($$source: Partial<DataDirectoryItem> = {}) {
+        if (!("id" in $$source)) {
+            this["id"] = "";
+        }
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+        if (!("reveal_dir" in $$source)) {
+            this["reveal_dir"] = "";
+        }
+        if (!("is_file" in $$source)) {
+            this["is_file"] = false;
+        }
+        if (!("exists" in $$source)) {
+            this["exists"] = false;
         }
 
         Object.assign(this, $$source);
     }
 
     /**
-     * Creates a new ApplyFileSettingsInput instance from a string or object.
+     * Creates a new DataDirectoryItem instance from a string or object.
      */
-    static createFrom($$source: any = {}): ApplyFileSettingsInput {
+    static createFrom($$source: any = {}): DataDirectoryItem {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ApplyFileSettingsInput($$parsedSource as Partial<ApplyFileSettingsInput>);
+        return new DataDirectoryItem($$parsedSource as Partial<DataDirectoryItem>);
     }
 }
 
-export class ApplyFileSettingsOutput {
+export class ListDataDirectoriesInput {
 
-    /** Creates a new ApplyFileSettingsOutput instance. */
-    constructor($$source: Partial<ApplyFileSettingsOutput> = {}) {
+    /** Creates a new ListDataDirectoriesInput instance. */
+    constructor($$source: Partial<ListDataDirectoriesInput> = {}) {
 
         Object.assign(this, $$source);
     }
 
     /**
-     * Creates a new ApplyFileSettingsOutput instance from a string or object.
+     * Creates a new ListDataDirectoriesInput instance from a string or object.
      */
-    static createFrom($$source: any = {}): ApplyFileSettingsOutput {
+    static createFrom($$source: any = {}): ListDataDirectoriesInput {
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
-        return new ApplyFileSettingsOutput($$parsedSource as Partial<ApplyFileSettingsOutput>);
+        return new ListDataDirectoriesInput($$parsedSource as Partial<ListDataDirectoriesInput>);
+    }
+}
+
+export class ListDataDirectoriesOutput {
+    "items": DataDirectoryItem[];
+
+    /** Creates a new ListDataDirectoriesOutput instance. */
+    constructor($$source: Partial<ListDataDirectoriesOutput> = {}) {
+        if (!("items" in $$source)) {
+            this["items"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new ListDataDirectoriesOutput instance from a string or object.
+     */
+    static createFrom($$source: any = {}): ListDataDirectoriesOutput {
+        const $$createField0_0 = $$createType1;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("items" in $$parsedSource) {
+            $$parsedSource["items"] = $$createField0_0($$parsedSource["items"]);
+        }
+        return new ListDataDirectoriesOutput($$parsedSource as Partial<ListDataDirectoriesOutput>);
     }
 }
 
@@ -80,7 +143,7 @@ export class LoadBootstrapOutput {
      * Creates a new LoadBootstrapOutput instance from a string or object.
      */
     static createFrom($$source: any = {}): LoadBootstrapOutput {
-        const $$createField0_0 = $$createType0;
+        const $$createField0_0 = $$createType2;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("bootstrap" in $$parsedSource) {
             $$parsedSource["bootstrap"] = $$createField0_0($$parsedSource["bootstrap"]);
@@ -238,7 +301,7 @@ export class SaveToolSettingsInput {
      * Creates a new SaveToolSettingsInput instance from a string or object.
      */
     static createFrom($$source: any = {}): SaveToolSettingsInput {
-        const $$createField0_0 = $$createType1;
+        const $$createField0_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("default_tool_ids" in $$parsedSource) {
             $$parsedSource["default_tool_ids"] = $$createField0_0($$parsedSource["default_tool_ids"]);
@@ -266,7 +329,7 @@ export class SaveToolSettingsOutput {
      * Creates a new SaveToolSettingsOutput instance from a string or object.
      */
     static createFrom($$source: any = {}): SaveToolSettingsOutput {
-        const $$createField0_0 = $$createType1;
+        const $$createField0_0 = $$createType3;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
         if ("default_tool_ids" in $$parsedSource) {
             $$parsedSource["default_tool_ids"] = $$createField0_0($$parsedSource["default_tool_ids"]);
@@ -326,5 +389,7 @@ export class ValidateShortcutSettingsOutput {
 }
 
 // Private type creation functions
-const $$createType0 = view_model$0.SettingsBootstrap.createFrom;
-const $$createType1 = $Create.Array($Create.Any);
+const $$createType0 = DataDirectoryItem.createFrom;
+const $$createType1 = $Create.Array($$createType0);
+const $$createType2 = view_model$0.SettingsBootstrap.createFrom;
+const $$createType3 = $Create.Array($Create.Any);

@@ -4,12 +4,16 @@ import (
 	"context"
 	"embed"
 	_ "embed"
+	"io"
 	"log"
-	"path/filepath"
+	"log/slog"
+	"os"
 
 	"github.com/reatang/fire-poker/backend/pkg/dir"
 	"github.com/reatang/fire-poker/backend/pkg/global_hotkey"
 	"github.com/reatang/fire-poker/backend/pkg/i18n"
+	"github.com/reatang/fire-poker/backend/pkg/id/window_id"
+	"github.com/reatang/fire-poker/backend/pkg/logger"
 	"github.com/reatang/fire-poker/backend/pkg/migration"
 	"github.com/reatang/fire-poker/backend/pkg/prompt"
 	"github.com/reatang/fire-poker/backend/pkg/skills"
@@ -48,6 +52,12 @@ func init() {
 }
 
 func main() {
+	dataDir, err := dir.GetDataDir()
+	if err != nil {
+		log.Fatal(err)
+	}
+	setupFileLogging(dataDir)
+
 	istorage, err := storage.NewStorage()
 	if err != nil {
 		log.Fatal(err)
@@ -56,17 +66,15 @@ func main() {
 		log.Fatal(err)
 	}
 
-	dataDir, derr := dir.GetDataDir()
-	if derr == nil {
-		if result, merr := migration.MigrateExtensionDirs(dataDir); merr != nil {
-			log.Printf("extension dir migration failed: %v", merr)
-		} else if len(result.Warnings) > 0 {
-			for _, w := range result.Warnings {
-				log.Printf("extension dir migration warning: %s", w)
-			}
+	if result, merr := migration.MigrateExtensionDirs(dataDir); merr != nil {
+		log.Printf("extension dir migration failed: %v", merr)
+	} else if len(result.Warnings) > 0 {
+		for _, w := range result.Warnings {
+			log.Printf("extension dir migration warning: %s", w)
 		}
-	} else {
-		log.Printf("skip extension dir migration: cannot resolve data dir: %v", derr)
+	}
+	for _, w := range migration.MigrateCacheDirs(dataDir) {
+		log.Printf("cache dir migration warning: %s", w)
 	}
 
 	providerService := provider.NewProvider(istorage)
@@ -113,6 +121,14 @@ func main() {
 		Name:        "Fire Poker",
 		Description: "一个经典模式的智能体客户端",
 		Icon:        brandIcon,
+		// Wails logs every asset request at info level; keep only warnings so the daily log stays readable.
+		Logger: slog.New(slog.NewTextHandler(log.Writer(), &slog.HandlerOptions{Level: slog.LevelWarn})),
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID: dir.BundleIdentifier,
+			OnSecondInstanceLaunch: func(application.SecondInstanceData) {
+				focusMainWindow()
+			},
+		},
 		Services: []application.Service{
 			application.NewService(settingsService),
 			application.NewService(agentService),
@@ -145,7 +161,7 @@ func main() {
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 		Windows: application.WindowsOptions{
-			WebviewUserDataPath: filepath.Join(dataDir, "webview2"),
+			WebviewUserDataPath: migration.WebViewDataDir(dataDir),
 		},
 	})
 
@@ -170,5 +186,39 @@ func main() {
 
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
+	}
+}
+
+// logRetentionDays is how many days of daily log files are kept in {dataDir}/logs.
+const logRetentionDays = 14
+
+// setupFileLogging mirrors the standard logger into daily files, since GUI launches discard stderr.
+func setupFileLogging(dataDir string) {
+	fileLogger, err := logger.New(logger.Options{DataDir: dataDir})
+	if err != nil {
+		log.Printf("file logging disabled: %v", err)
+		return
+	}
+	log.SetOutput(io.MultiWriter(os.Stderr, fileLogger))
+	if err := fileLogger.Prune(logRetentionDays); err != nil {
+		log.Printf("prune old logs failed: %v", err)
+	}
+}
+
+// focusMainWindow brings the existing home or onboarding window forward when the app is launched again.
+func focusMainWindow() {
+	app := application.Get()
+	if app == nil {
+		return
+	}
+	for _, name := range []string{window_id.Home, window_id.Onboarding} {
+		if win, ok := app.Window.GetByName(name); ok {
+			if win.IsMinimised() {
+				win.UnMinimise()
+			}
+			win.Show()
+			win.Focus()
+			return
+		}
 	}
 }

@@ -54,14 +54,11 @@ var zhCN = map[string]string{
 	"ierror.file.save_temp_file": "保存临时文件失败",
 
 	// Settings
-	"ierror.settings.load_config":         "加载配置失败",
-	"ierror.settings.save_config":         "保存配置失败",
-	"ierror.settings.create_dir":          "创建目录失败",
-	"ierror.settings.copy_file":           "复制文件失败",
-	"ierror.settings.read_config":         "读取配置文件失败",
-	"ierror.settings.parse_config":        "解析配置失败",
-	"ierror.settings.write_locator":       "写入数据目录定位符失败",
-	"ierror.settings.target_dir_required": "目标数据目录不能为空",
+	"ierror.settings.list_data_dirs": "读取数据目录失败",
+	"ierror.settings.load_config":    "加载配置失败",
+	"ierror.settings.save_config":    "保存配置失败",
+	"ierror.settings.read_config":    "读取配置文件失败",
+	"ierror.settings.parse_config":   "解析配置失败",
 
 	// Provider
 	"ierror.provider.create":           "创建提供商失败",

@@ -47,12 +47,9 @@ const (
 	// Settings error codes
 	ErrSettingsLoadConfig   errorCode = "ierror.settings.load_config"
 	ErrSettingsSaveConfig   errorCode = "ierror.settings.save_config"
-	ErrSettingsCreateDir    errorCode = "ierror.settings.create_dir"
-	ErrSettingsCopyFile     errorCode = "ierror.settings.copy_file"
 	ErrSettingsReadConfig   errorCode = "ierror.settings.read_config"
 	ErrSettingsParseConfig  errorCode = "ierror.settings.parse_config"
-	ErrSettingsWriteLocator errorCode = "ierror.settings.write_locator"
-	ErrSettingsTargetDir    errorCode = "ierror.settings.target_dir_required"
+	ErrSettingsListDataDirs errorCode = "ierror.settings.list_data_dirs"
 
 	// Provider error codes
 	ErrProviderCreate        errorCode = "ierror.provider.create"
