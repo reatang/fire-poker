@@ -1,10 +1,8 @@
 package settings
 
 import (
-	"encoding/json"
-	"os"
+	"errors"
 	"path/filepath"
-	"strings"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	"github.com/reatang/fire-poker/backend/pkg/configfile"
@@ -21,28 +19,14 @@ func (s *Settings) loadConfig() (*data_models.Config, error) {
 		return nil, ierror.Error(ierror.ErrSettingsLoadConfig, err)
 	}
 
-	configPath := filepath.Join(dataDir, dir.ConfigFileName)
-	bytes, err := configfile.ReadFile(configPath)
+	config, err := configfile.LoadOrInit(dataDir, defaultConfig(dataDir))
 	if err != nil {
-		if os.IsNotExist(err) {
-			config := defaultConfig(dataDir)
-			if err := configfile.Ensure(dataDir, config); err != nil {
-				return nil, ierror.Error(ierror.ErrSettingsSaveConfig, err)
-			}
-			return s.loadConfig()
+		if errors.Is(err, configfile.ErrInvalidConfig) {
+			return nil, ierror.Error(ierror.ErrSettingsParseConfig, err)
 		}
 		return nil, ierror.Error(ierror.ErrSettingsReadConfig, err)
 	}
-
-	config := defaultConfig(dataDir)
-	if err := json.Unmarshal(bytes, config); err != nil {
-		return nil, ierror.Error(ierror.ErrSettingsParseConfig, err)
-	}
-	if !strings.Contains(string(bytes), `"memory"`) {
-		config.Memory.Enabled = true
-	}
-	// The resolved directory is authoritative, including portable launch overrides.
-	config.DataDir = dataDir
+	// configfile.Load already resolved DataDir and the memory default; fill the display defaults.
 	if config.FontSize == "" {
 		config.FontSize = "md"
 	}

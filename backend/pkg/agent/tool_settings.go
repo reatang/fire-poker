@@ -6,12 +6,13 @@ import (
 
 	"github.com/reatang/fire-poker/backend/pkg/agent/toolkit"
 	"github.com/reatang/fire-poker/backend/pkg/agent/tools"
+	"github.com/reatang/fire-poker/backend/pkg/configfile"
 	"github.com/reatang/fire-poker/backend/storage"
 )
 
 // DefaultToolIDs loads global defaults without consulting or modifying any session.
 func (m *Manager) DefaultToolIDs() ([]string, error) {
-	config, err := loadAgentConfig()
+	config, err := configfile.LoadCurrent()
 	if err != nil {
 		return nil, err
 	}

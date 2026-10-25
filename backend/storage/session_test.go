@@ -18,6 +18,11 @@ func newTestStorage(t *testing.T) *Storage {
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
+	// A shared-cache memory database lives until its last connection closes; closing it
+	// keeps -count/-race reruns from seeing rows left by the previous run of the same test.
+	if sqlDB, err := db.DB(); err == nil {
+		t.Cleanup(func() { _ = sqlDB.Close() })
+	}
 
 	stor, err := NewStorageFromDB(db)
 	if err != nil {

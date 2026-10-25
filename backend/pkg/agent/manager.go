@@ -3,16 +3,11 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 
-	"github.com/reatang/fire-poker/backend/models/data_models"
 	"github.com/reatang/fire-poker/backend/pkg/agent/toolkit"
 	"github.com/reatang/fire-poker/backend/pkg/agent/tools"
-	"github.com/reatang/fire-poker/backend/pkg/configfile"
 	"github.com/reatang/fire-poker/backend/pkg/dir"
 	"github.com/reatang/fire-poker/backend/pkg/id/event_id"
 	"github.com/reatang/fire-poker/backend/pkg/id/prompt_id"
@@ -295,35 +290,6 @@ func (m *Manager) runnerKey(cfg ModelConfig, enabledUserTools []string, sessionK
 	return fmt.Sprintf("provider:%d|cred:%s|model:%s|tools:%s|kind:%s|session:%d|catalog:%d|services:%d",
 		cfg.ProviderID, cfg.credentialFingerprint(), cfg.ModelName, selection, sessionKind, sessionID,
 		m.toolRegistry.Version(), servicesVersion)
-}
-
-func loadAgentConfig() (*data_models.Config, error) {
-	dataDir, err := dir.GetDataDir()
-	if err != nil {
-		return nil, err
-	}
-	bytes, err := configfile.ReadFile(filepath.Join(dataDir, dir.ConfigFileName))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return &data_models.Config{
-				Extensions: []data_models.ExtensionItem{},
-				Memory:     data_models.MemoryConfig{Enabled: true},
-			}, nil
-		}
-		return nil, err
-	}
-
-	config := &data_models.Config{}
-	if err := json.Unmarshal(bytes, config); err != nil {
-		return nil, err
-	}
-	if !strings.Contains(string(bytes), `"memory"`) {
-		config.Memory.Enabled = true
-	}
-	if config.Extensions == nil {
-		config.Extensions = []data_models.ExtensionItem{}
-	}
-	return config, nil
 }
 
 func mustDataDir() string {

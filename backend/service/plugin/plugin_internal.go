@@ -2,9 +2,6 @@ package plugin
 
 import (
 	"context"
-	"encoding/json"
-	"os"
-	"path/filepath"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	pkgcli "github.com/reatang/fire-poker/backend/pkg/cli"
@@ -20,41 +17,20 @@ func mustDataDir() string {
 	return dataDir
 }
 
+// loadConfig reads the shared config, creating first-run defaults so extensions can be saved into it.
 func (p *Plugin) loadConfig() (*data_models.Config, error) {
 	dataDir, err := dir.GetDataDir()
 	if err != nil {
 		return nil, err
 	}
-
-	configPath := filepath.Join(dataDir, dir.ConfigFileName)
-	bytes, err := configfile.ReadFile(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			cfg := &data_models.Config{
-				Locale:     "zh-CN",
-				Language:   "zh-CN",
-				FontSize:   "md",
-				DataDir:    dataDir,
-				LogLevel:   "info",
-				Extensions: []data_models.ExtensionItem{},
-			}
-			if saveErr := configfile.Ensure(dataDir, cfg); saveErr != nil {
-				return nil, saveErr
-			}
-			return p.loadConfig()
-		}
-		return nil, err
-	}
-
-	cfg := &data_models.Config{}
-	if err := json.Unmarshal(bytes, cfg); err != nil {
-		return nil, err
-	}
-	if cfg.Extensions == nil {
-		cfg.Extensions = []data_models.ExtensionItem{}
-	}
-	cfg.DataDir = dataDir
-	return cfg, nil
+	return configfile.LoadOrInit(dataDir, &data_models.Config{
+		Locale:     "zh-CN",
+		Language:   "zh-CN",
+		FontSize:   "md",
+		DataDir:    dataDir,
+		LogLevel:   "info",
+		Extensions: []data_models.ExtensionItem{},
+	})
 }
 
 func (p *Plugin) saveConfig(config *data_models.Config) error {

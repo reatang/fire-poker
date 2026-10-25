@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
+	"github.com/reatang/fire-poker/backend/pkg/configfile"
 	"github.com/reatang/fire-poker/backend/storage"
 )
 
@@ -136,7 +137,7 @@ func (ch *ChatHandler) enqueueMemoryEncoding(params SendMessageParams, assistant
 }
 
 func memoryFeatureEnabled() bool {
-	config, err := loadAgentConfig()
+	config, err := configfile.LoadCurrent()
 	if err != nil {
 		return false
 	}

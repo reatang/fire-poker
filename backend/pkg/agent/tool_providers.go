@@ -6,6 +6,7 @@ import (
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	"github.com/reatang/fire-poker/backend/pkg/agent/toolkit"
 	pkgcli "github.com/reatang/fire-poker/backend/pkg/cli"
+	"github.com/reatang/fire-poker/backend/pkg/configfile"
 	pkgRuntimeState "github.com/reatang/fire-poker/backend/pkg/runtime_state"
 	agenttool "trpc.group/trpc-go/trpc-agent-go/tool"
 )
@@ -27,7 +28,7 @@ func selectedExtensions(kind string, enabledToolIDs []string) ([]data_models.Ext
 	if len(enabledToolIDs) == 0 {
 		return nil, nil
 	}
-	config, err := loadAgentConfig()
+	config, err := configfile.LoadCurrent()
 	if err != nil {
 		return nil, fmt.Errorf("load extension configuration: %w", err)
 	}

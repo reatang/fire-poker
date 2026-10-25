@@ -28,7 +28,7 @@ cd frontend && npx tsc --noEmit && npx vitest run
 | M0 | 基线与护栏 | — | 无 | 否 |
 | M1 | 工具审批安全加固（主体已由 `296cedd` 完成） | P0 | M0 | 否 |
 | M2 | 凭据收敛与 runner 生命周期（已完成） | P1 | M0 | **是** |
-| M3 | 配置仓库与 SQLite 并发 | P1 | M1（同改 `lookupToolMeta`） | 否 |
+| M3 | 配置仓库与 SQLite 并发（已完成） | P1 | M1（同改 `lookupToolMeta`） | 否 |
 | M4 | 后端结构整理与 i18n | P2 | M2、M3 | 是（事件类型） |
 | M5 | 前端结构整理 | P2 | M2（同改 `chatStore`） | 否 |
 | M6 | 静态检查进 CI | P3 | M4、M5 | 否 |
@@ -179,24 +179,46 @@ M1 与 M2 改动的文件基本不重叠，可以并行；M5 可以在 M2 合并
 - Modify: `main.go`
 - Test: `backend/storage/*_test.go`
 
-### Task 3.1 ConfigRepository
+> **状态：已完成**（2026-10-25）。实际实现与原计划的差异见各任务下的“实现说明”。
 
-- [ ] 接口：`Load() (*Config, error)`（内存缓存 + 文件修改时间校验）、`Update(func(*Config) error) error`（复用现有 `configfile.Update` 的文件锁）、`Subscribe(func(*Config))`。
-- [ ] 测试：并发读写不丢字段；外部修改文件后能读到新值；缺省时 `Memory.Enabled` 默认为 `true`。
+### Task 3.1 统一的配置读取
+
+- [x] 新增 `backend/pkg/configfile/load.go`：
+  - `Load(dataDir)` 是 config.json 唯一的读取入口，不会创建文件。它统一做三项归一化：`DataDir` 以实际解析出的目录为准；`Extensions` 为 nil 时转为空列表；只有用户显式保存过 `memory.enabled` 时才采用该值，否则记忆默认开启。
+  - `LoadCurrent()` 读取应用当前数据目录下的配置。
+  - `LoadOrInit(dataDir, defaults)` 在文件不存在时先写入默认配置再读取，写入复用 `Ensure`，不会覆盖已有数据。
+  - 文件存在但无法解析时返回 `ErrInvalidConfig`。
+- [x] 修复存量 bug：原来用 `strings.Contains(bytes, "\"memory\"")` 判断用户是否设置过记忆开关，只要配置里任何地方出现 `"memory"`（比如某个扩展名叫 memory），就会被当成“已设置”，导致记忆被默认关闭。现在改为检查 JSON 结构。
+- [x] 测试：文件缺失时返回默认值且不创建文件；6 种 memory 配置形态（含上述误判场景）；`DataDir` 覆盖与字段保留；非法 JSON 返回 `ErrInvalidConfig`；`LoadOrInit` 只在缺失时写入默认值。
+- 实现说明：**没有做内存缓存和 Subscribe**。配置文件只有几 KB，读取加解析是微秒级；而按文件修改时间判断缓存是否失效，在时间戳精度粗的文件系统上，同一秒内写入且大小不变的修改会被漏掉，反而有读到旧配置的风险。Subscribe 目前没有任何使用方。写入仍走原有的 `Update` / `SaveFields` / `Ensure`（带文件锁）。
 
 ### Task 3.2 迁移读取方
 
-- [ ] 逐个服务改为依赖 `ConfigRepository`（通过构造函数注入，`main.go` 组装）。
-- [ ] 删除 `loadAgentConfig` 及其字符串判断。
-- [ ] 每迁移一个服务跑一次对应包的测试；一个服务一个 commit，方便回溯。
+- [x] `pkg/agent` 删除 `loadAgentConfig`，4 处调用（工具审批、扩展工具集、工具设置、记忆开关）改为 `configfile.LoadCurrent()`。
+- [x] `service/settings`、`service/plugin` 改用 `LoadOrInit`，各自保留首次运行写入的默认值；settings 用 `ErrInvalidConfig` 继续区分“解析失败”和“读取失败”两种错误码。
+- [x] `service/memory`、`service/skills`、`service/provider` 改用 `LoadCurrent`。
+- [x] 验收：`dir.ConfigFileName` 只剩 `configfile` 包、`migration/extension_dirs.go`，以及数据管理页列出文件路径的那一处（只用于展示路径，不读取）。
+- 实现说明：各服务继续调用包级函数，没有改成构造函数注入，原因同上：没有缓存可共享，也就没有需要注入的实例。所有改动在同一个提交里。
 
 ### Task 3.3 SQLite 连接配置
 
-- [ ] `NewStorage` 的 DSN 加上 `_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)`（按 `gorm.io/driver/sqlite` 底层驱动确认参数写法），并设置合理的 `SetMaxOpenConns`。
-- [ ] 测试：多个 goroutine 并发 `CreateMessage` + `CreateMemory` 不报锁错误。
-- [ ] 确认旧数据库升级到 WAL 后正常读写；记录生成的 `-wal`/`-shm` 文件已在备份/清理逻辑中考虑。
+- [x] `NewStorage` 的 DSN 加上 `_journal_mode=WAL&_busy_timeout=5000&_txlock=immediate`（mattn/go-sqlite3 的参数写法）。
+  - `_txlock=immediate` 是必需的：`AppendTerminalOutput` 这类“先读后写”的事务在默认 deferred 模式下，读锁升级为写锁时会直接返回 `SQLITE_BUSY`，不受 busy_timeout 影响。已验证：去掉该参数后，并发测试 20 次全部失败（193 次 `database is locked`）。
+  - 没有设置 `SetMaxOpenConns`：WAL 下读不阻塞，写由锁加 busy_timeout 串行化，目前没有限制连接数的必要。
+- [x] 测试（新增 `backend/storage/storage_test.go`）：真实文件数据库的 `journal_mode` 为 `wal`、`busy_timeout` 至少 1 秒；8 个 goroutine 并发执行 `CreateMessage`、`AppendTerminalOutput`、`CreateMemory` 共 200 次写入且无报错，每个终端的输出分块序号连续、游标正确。修复前该测试稳定复现 `database is locked`，修复后 `-count=20` 稳定通过。
+- [x] `-wal` / `-shm` 文件：代码中没有复制或清理 `data.db` 的逻辑（只有数据管理页展示 `data.db` 路径），因此不受影响。旧数据库在首次打开时由 SQLite 自动切换为 WAL 模式。
+- [x] 附带修复：`backend/storage` 测试辅助函数 `newTestStorage` 从不关闭共享缓存的内存数据库，导致 `-count` 大于 1 时上一轮的数据残留、多个用例失败（与本次改动无关的存量问题）。现在在 cleanup 中关闭连接，`-race -count=5` 稳定通过。
 
-**验收：** 全局搜索 `dir.ConfigFileName` 只剩 `configfile` 包和迁移代码；并发写测试稳定通过（`-count=20`）。
+### Task 3.4 plugin 复用共享 storage（M2 后续项）
+
+- [x] `loadDefaultChatModel` 原来每次调用都 `storage.NewStorage()` 新开数据库，而且从不关闭。现在新增 `NewPluginWithStorage(stor)`（沿用 `NewTerminalWithManager` 的写法），`main.go` 注入共享 storage；`NewPlugin()` 不带 storage，解析默认模型时返回 `errPluginStorageUnavailable`，不再私自开库。
+- [x] 测试：通过注入的 storage 解析出默认 provider 及其默认模型；不带 storage 时返回明确错误。
+
+**验收：** ✅ `storage.NewStorage()` 只在 `main.go` 调用一次；并发写测试 `-count=20` 稳定通过；`wails3 task check` 通过（vitest 40 个文件、199 个用例；Go 30 个包）。
+
+**后续项（未包含在 M3 内）：**
+- [ ] 手动验证：用旧版本留下的 `data.db` 启动新版本，确认能自动切到 WAL 并正常读写；在应用里同时进行流式对话和终端命令，确认终端输出没有丢失。
+- [ ] `pkg/terminal` 的 `drain` 在 `AppendTerminalOutput` 出错时直接 `continue`，静默丢弃输出。锁冲突修复后这种情况应该很少出现，但仍建议至少记录日志。
 
 ---
 

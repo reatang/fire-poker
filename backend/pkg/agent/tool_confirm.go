@@ -8,6 +8,7 @@ import (
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	"github.com/reatang/fire-poker/backend/pkg/agent/tools"
+	"github.com/reatang/fire-poker/backend/pkg/configfile"
 	"github.com/reatang/fire-poker/backend/pkg/id/event_id"
 	"trpc.group/trpc-go/trpc-agent-go/model"
 	toolpkg "trpc.group/trpc-go/trpc-agent-go/tool"
@@ -172,7 +173,7 @@ func (m *Manager) lookupToolMeta(toolName string) (tools.ToolMeta, bool) {
 	if meta, ok := m.ToolRegistry().Get(toolName); ok {
 		return meta, true
 	}
-	config, err := loadAgentConfig()
+	config, err := configfile.LoadCurrent()
 	if err != nil {
 		return tools.ToolMeta{}, false
 	}

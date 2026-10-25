@@ -1,10 +1,6 @@
 package memory
 
 import (
-	"encoding/json"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
@@ -53,29 +49,9 @@ func formatOptionalTime(value *time.Time) *string {
 	return &formatted
 }
 
+// loadConfig reads the shared config; configfile.Load applies the memory-enabled default.
 func (m *Memory) loadConfig() (*data_models.Config, error) {
-	dataDir, err := dir.GetDataDir()
-	if err != nil {
-		return nil, err
-	}
-	config := &data_models.Config{}
-	bytes, err := configfile.ReadFile(filepath.Join(dataDir, dir.ConfigFileName))
-	if err != nil {
-		if os.IsNotExist(err) {
-			config.DataDir = dataDir
-			config.Memory.Enabled = true
-			return config, nil
-		}
-		return nil, err
-	}
-	if err := json.Unmarshal(bytes, config); err != nil {
-		return nil, err
-	}
-	if !strings.Contains(string(bytes), `"memory"`) {
-		config.Memory.Enabled = true
-	}
-	config.DataDir = dataDir
-	return config, nil
+	return configfile.LoadCurrent()
 }
 
 func (m *Memory) saveConfig(config *data_models.Config) error {
