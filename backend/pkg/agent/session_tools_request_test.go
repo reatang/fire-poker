@@ -54,8 +54,8 @@ func TestSessionSelectionControlsLLMRequestTools(t *testing.T) {
 				t.Fatal(err)
 			}
 			for ev := range events {
-				if ev.Response != nil && ev.Response.Error != nil {
-					t.Fatal(ev.Response.Error)
+				if ev.Response != nil && ev.Error != nil {
+					t.Fatal(ev.Error)
 				}
 			}
 			select {

@@ -28,8 +28,8 @@ type Plugin struct {
 	resolveDefaultChatModel func() (defaultChatModel, error)
 	loadPersistedRuntime    func() (pkgRuntimeState.StateSnapshot, error)
 	wailsApp                *application.App
-	loginMu                 sync.Mutex
-	loginFields             // platform-specific: loginSessions + startCliLogin (no-op stub on Windows)
+	loginMu                 sync.Mutex //nolint:unused // only the !windows CLI login implementation locks it
+	loginFields                        //nolint:unused // platform-specific: loginSessions + startCliLogin (no-op stub on Windows)
 }
 
 // NewPlugin creates a plugin service without database access; manifest generation needs NewPluginWithStorage.

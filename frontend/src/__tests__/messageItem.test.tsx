@@ -1,4 +1,4 @@
-import type { ComponentProps, ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
@@ -6,15 +6,12 @@ import { MessageItem } from '@/components/chat/MessageItem'
 import type { Message } from '@/types'
 import i18n from '@/i18n'
 
-type MarkdownProps = ComponentProps<typeof MessageItem> extends { message: infer _M }
-  ? {
-      children?: ReactNode
-      components?: Record<string, (...args: any[]) => ReactNode>
-    }
-  : {
-      children?: ReactNode
-      components?: Record<string, (...args: any[]) => ReactNode>
-    }
+// The markdown renderers MessageItem passes to react-markdown, called here with plain props.
+type MarkdownRenderer = (props: { children?: ReactNode; className?: string }) => ReactNode
+type MarkdownProps = {
+  children?: ReactNode
+  components?: Record<string, MarkdownRenderer>
+}
 
 const markdownRenderSpy = vi.fn((props: MarkdownProps) => (
   <div data-testid="markdown-renderer">{props.children}</div>

@@ -4,11 +4,7 @@ package global_hotkey
 
 import "golang.design/x/hotkey"
 
-// quickChatModifiers returns the macOS command-based quick chat shortcut modifiers.
-func quickChatModifiers() []hotkey.Modifier {
-	return []hotkey.Modifier{hotkey.ModCmd, hotkey.ModShift}
-}
-
+// quickChatModifierForToken maps a shortcut token to the macOS hotkey modifier.
 func quickChatModifierForToken(token string) (hotkey.Modifier, bool) {
 	switch token {
 	case "CmdOrCtrl", "Cmd":
