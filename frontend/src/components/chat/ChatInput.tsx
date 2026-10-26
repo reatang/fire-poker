@@ -84,17 +84,19 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
   const [modelOpen, setModelOpen] = useState(false)
   const [modelQuery, setModelQuery] = useState('')
   const [isEmpty, setIsEmpty] = useState(true)
+  const targetSessionId = sessionId ?? currentConversationId
   const {
     attachments,
     setAttachments,
+    composerId,
+    isImporting,
     isDraggingOver,
     handleAttach,
     handlePaste,
     handleDragOver,
     handleDragLeave,
     handleDrop,
-  } = useComposerAttachments()
-  const targetSessionId = sessionId ?? currentConversationId
+  } = useComposerAttachments(targetSessionId)
   const defaultToolIds = useAppStore(state => state.enabledToolIds)
   const sessionToolIds = useChatStore(state => targetSessionId ? state.sessionToolIds[targetSessionId] : undefined)
   const selectedToolIds = targetSessionId ? (sessionToolIds ?? []) : (draftToolIds ?? defaultToolIds)
@@ -247,7 +249,7 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
 
 
   const handleSend = async () => {
-    if (!editor || isStreaming || toolsSaving) return
+    if (!editor || isStreaming || toolsSaving || isImporting) return
     const content = ((editor.storage as { markdown?: { getMarkdown?: () => string } }).markdown?.getMarkdown?.() ?? '').trim()
     if (!content && attachments.length === 0) return
 
@@ -349,8 +351,9 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
   return (
     <div
       style={isQuick ? quickNoDragStyle : undefined}
-      className={cn('chat-input-area shrink-0', isQuick ? 'px-3 pb-3 pt-1' : 'desktop-composer-area pb-4 pt-2')}
+      className={cn('chat-input-area group/composer shrink-0', isQuick ? 'px-3 pb-3 pt-1' : 'desktop-composer-area pb-4 pt-2')}
       data-file-drop-target
+      data-composer-id={composerId}
       onPaste={handlePaste}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -358,7 +361,7 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
     >
       <div className={cn('mx-auto w-full', isQuick ? 'max-w-none px-0' : 'desktop-composer-width px-4')}>
         <div className={cn(
-          'border border-border bg-background shadow-sm focus-within:border-primary/40 transition-colors relative',
+          'border border-border bg-background shadow-sm focus-within:border-primary/40 transition-colors relative group-[.file-drop-target-active]/composer:border-primary group-[.file-drop-target-active]/composer:bg-primary/5',
           isQuick ? 'rounded-lg' : 'desktop-composer rounded-2xl',
           isDraggingOver && "border-primary"
         )}>
@@ -437,7 +440,7 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
             onClick={() => {
               void (isStreaming ? Promise.resolve(handleStop()) : handleSend())
             }}
-            disabled={!isStreaming && (toolsSaving || (isEmpty && attachments.length === 0))}
+            disabled={!isStreaming && (toolsSaving || isImporting || (isEmpty && attachments.length === 0))}
             className={cn(
               'p-1.5 rounded-lg transition-colors',
               isStreaming

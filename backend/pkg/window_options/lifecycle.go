@@ -11,7 +11,22 @@ import (
 func NewHomeWindow(app *application.App) *application.WebviewWindow {
 	win := app.Window.NewWithOptions(DefaultHome())
 	bindRootWindowClose(app, win)
+	win.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
+		payload := fileDropPayload(event.Context().DroppedFiles(), event.Context().DropTargetDetails())
+		if payload != nil {
+			app.Event.Emit("files-dropped", payload)
+		}
+	})
 	return win
+}
+
+// The target token belongs to one composer draft, including across webviews.
+// Ignore drops outside a composer rather than broadcasting unaddressed files.
+func fileDropPayload(files []string, target *application.DropTargetDetails) map[string]any {
+	if target == nil || target.Attributes["data-composer-id"] == "" || len(files) == 0 {
+		return nil
+	}
+	return map[string]any{"files": files, "target": target.Attributes["data-composer-id"]}
 }
 
 // NewOnboardingWindow exits on close unless onboarding is handing off to home.

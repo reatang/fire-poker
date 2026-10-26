@@ -3,14 +3,17 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { ChatMessages } from '@/components/chat/ChatMessages'
 import { MessageActions } from '@/components/chat/MessageActions'
+import { MessageItem } from '@/components/chat/MessageItem'
 import { useChatStore } from '@/store/chatStore'
 import i18n from '@/i18n'
 import type { Message } from '@/types'
-import { Clipboard } from '@wailsio/runtime'
+import { Browser, Clipboard } from '@wailsio/runtime'
 
 vi.mock('@wailsio/runtime', async (importOriginal) => ({
   ...await importOriginal<typeof import('@wailsio/runtime')>(),
   Clipboard: { SetText: vi.fn() },
+  Browser: { OpenURL: vi.fn().mockResolvedValue(undefined) },
+  Flags: { GetFlag: () => false },
 }))
 
 vi.mock('@/components/chat/TerminalSessionPanels', () => ({ TerminalSessionPanels: () => null }))
@@ -22,6 +25,15 @@ beforeEach(async () => {
   vi.stubGlobal('requestAnimationFrame', () => 1)
   vi.stubGlobal('cancelAnimationFrame', () => {})
   useChatStore.setState({currentConversationId:1,conversations:[],messages:{},sessionStatuses:{},streamingMessages:{},pendingConfirms:{},initEventListeners:()=>()=>{}})
+})
+
+it('opens assistant links through Wails and cancels browser navigation', async () => {
+  render(<MessageItem message={msg(1, 'assistant', 'text', '[Help](https://example.com/help)')} />)
+  const link = screen.getByRole('link', { name: 'Help' })
+  const click = new MouseEvent('click', { bubbles: true, cancelable: true })
+  act(() => { link.dispatchEvent(click) })
+  expect(click.defaultPrevented).toBe(true)
+  expect(Browser.OpenURL).toHaveBeenCalledExactlyOnceWith('https://example.com/help')
 })
 
 it('keeps one identity above thinking and text when streaming becomes persisted history', async () => {
@@ -66,6 +78,7 @@ it('copies only answer content and invokes regeneration once', async () => {
 it('shows copy failures and disables regeneration while another run is active', async () => {
   const user=userEvent.setup()
   vi.mocked(Clipboard.SetText).mockRejectedValue(new Error('denied'))
+  vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('denied'))
   render(<MessageActions content="answer" disabled onRegenerate={vi.fn()}/>)
   expect(screen.getByRole('button',{name:'重新生成'})).toBeDisabled()
   await user.click(screen.getByRole('button',{name:'复制回复'}))

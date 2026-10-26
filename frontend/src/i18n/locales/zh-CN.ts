@@ -491,6 +491,7 @@ export default {
     saveFailed: '保存失败',
   },
   alert: {
+    actionFailed: '操作失败',
     dismiss: '关闭提醒',
     showDetails: '展开详情',
     hideDetails: '收起详情',
@@ -521,6 +522,7 @@ export default {
     attachLimitCount: '最多附加 {{max}} 个文件',
     attachLimitSize: '单个文件不超过 {{mb}}MB',
     dropFiles: '释放以添加文件',
+    attachFailed: '添加附件失败',
     manageToolsPlugins: '管理工具与插件',
     toolCategories: {
       builtin: '内置工具',

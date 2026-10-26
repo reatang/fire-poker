@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Check, Copy, GitBranch, RotateCcw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Clipboard } from '@wailsio/runtime'
+import { writeClipboardText } from '@/lib/runtimeInterop'
 import { useAlertStore } from '@/alert/store'
 import { parseUnknownIError } from '@/lib/ierror'
 
@@ -18,7 +18,7 @@ export function MessageActions({ content, onRegenerate, onFork, forkOnly = false
   useEffect(() => () => clearTimeout(timer.current), [])
   const copy = async () => {
     try {
-      await Clipboard.SetText(content)
+      await writeClipboardText(content)
       setCopied(true); setError(''); clearTimeout(timer.current)
       timer.current = setTimeout(() => setCopied(false), 1800)
     } catch { setError(t('messageActions.copyFailed')) }

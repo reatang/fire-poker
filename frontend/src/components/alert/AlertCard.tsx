@@ -3,6 +3,7 @@ import { CircleX, AlertTriangle, CheckCircle2, Info } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { AlertAction, AlertItem } from '@/alert/types'
 import { useAlertStore } from '@/alert/store'
+import { openExternalURL, reportInteropError, writeClipboardText } from '@/lib/runtimeInterop'
 
 type AlertCardProps = {
   alert: AlertItem
@@ -90,14 +91,14 @@ export function AlertCard({ alert }: AlertCardProps) {
   const colors = variantColors(alert.kind)
 
   const copyDetails = async (): Promise<void> => {
-    if (!alert.detail || !navigator.clipboard) return
+    if (!alert.detail) return
     const payload = [
       alert.title,
       alert.message,
       alert.code ? `Code: ${alert.code}` : '',
       alert.detail,
     ].filter((item) => item.length > 0).join('\n')
-    await navigator.clipboard.writeText(payload)
+    await writeClipboardText(payload)
   }
 
   return (
@@ -146,7 +147,7 @@ export function AlertCard({ alert }: AlertCardProps) {
               <button
                 type="button"
                 className={`mt-2 text-xs underline-offset-2 transition hover:underline ${colors.muted}`}
-                onClick={() => { void copyDetails() }}
+                onClick={() => { void copyDetails().catch(reportInteropError) }}
               >
                 {t('alert.copyDetails')}
               </button>
@@ -162,7 +163,7 @@ export function AlertCard({ alert }: AlertCardProps) {
                   className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${actionClassName(action)}`}
                   onClick={() => {
                     action.onClick?.()
-                    if (action.href) window.open(action.href, '_blank', 'noopener,noreferrer')
+                    if (action.href) void openExternalURL(action.href).catch(reportInteropError)
                     if (action.closeOnClick) closeAlert(alert.id, 'action')
                   }}
                 >

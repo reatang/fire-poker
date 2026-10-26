@@ -6,6 +6,7 @@ import { File } from '@bindings/github.com/reatang/fire-poker/backend/service/fi
 import { SettingsContentLayout } from '@/components/settings/common/SettingsContentLayout'
 import { SettingsPanelHeader } from '@/components/settings/common/SettingsPanelHeader'
 import { parseUnknownIError } from '@/lib/ierror'
+import { writeClipboardText } from '@/lib/runtimeInterop'
 
 type DataDirectoryItem = {
   id: string
@@ -58,7 +59,7 @@ export function DataManagementView() {
 
   const copyPath = async (item: DataDirectoryItem) => {
     try {
-      await navigator.clipboard.writeText(item.path)
+      await writeClipboardText(item.path)
       setCopiedId(item.id)
     } catch {
       setCopiedId('')

@@ -8,6 +8,7 @@ import (
 	"log"
 	"log/slog"
 	"os"
+	"runtime"
 
 	"github.com/reatang/fire-poker/backend/pkg/dir"
 	"github.com/reatang/fire-poker/backend/pkg/global_hotkey"
@@ -38,7 +39,6 @@ import (
 	"github.com/reatang/fire-poker/backend/storage"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
-	"github.com/wailsapp/wails/v3/pkg/events"
 )
 
 //go:embed all:frontend/dist
@@ -146,14 +146,11 @@ func main() {
 			application.NewService(memoryService),
 			application.NewService(notificationService),
 		},
-		KeyBindings: map[string]func(window application.Window){
-			quickChatShortcut: func(window application.Window) {
-				log.Printf("quick chat app-level shortcut pressed")
-				if _, err := windowService.ToggleQuickChat(context.Background(), window_dto.ToggleQuickChatInput{}); err != nil {
-					log.Printf("quick chat toggle failed: %v", err)
-				}
-			},
-		},
+		KeyBindings: quickChatFallbackBindings(runtime.GOOS, quickChatShortcut, func() {
+			if _, err := windowService.ToggleQuickChat(context.Background(), window_dto.ToggleQuickChatInput{}); err != nil {
+				log.Printf("quick chat toggle failed: %v", err)
+			}
+		}),
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},
@@ -171,12 +168,7 @@ func main() {
 	}
 
 	if initState != nil && initState.Initialized {
-		win := window_options.NewHomeWindow(app)
-		win.OnWindowEvent(events.Common.WindowFilesDropped, func(event *application.WindowEvent) {
-			application.Get().Event.Emit("files-dropped", map[string]any{
-				"files": event.Context().DroppedFiles(),
-			})
-		})
+		window_options.NewHomeWindow(app)
 	} else {
 		window_options.NewOnboardingWindow(app)
 	}
@@ -187,6 +179,15 @@ func main() {
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// Windows and macOS use the global hotkey service as the sole shortcut owner.
+// Keep an in-app fallback on platforms without a global hotkey backend.
+func quickChatFallbackBindings(goos, shortcut string, toggle func()) map[string]func(application.Window) {
+	if goos == "windows" || goos == "darwin" {
+		return nil
+	}
+	return map[string]func(application.Window){shortcut: func(application.Window) { toggle() }}
 }
 
 // logRetentionDays is how many days of daily log files are kept in {dataDir}/logs.

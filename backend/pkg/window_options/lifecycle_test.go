@@ -33,3 +33,20 @@ func TestRootWindowClose(t *testing.T) {
 		})
 	}
 }
+
+func TestFileDropRequiresComposerTarget(t *testing.T) {
+	files := []string{"/pictures/photo.png"}
+	for _, target := range []*application.DropTargetDetails{nil, {}, {Attributes: map[string]string{"id": "other"}}} {
+		if fileDropPayload(files, target) != nil {
+			t.Fatal("drop outside a composer must not be broadcast")
+		}
+	}
+	target := &application.DropTargetDetails{Attributes: map[string]string{"data-composer-id": "draft-123"}}
+	payload := fileDropPayload(files, target)
+	if payload["target"] != "draft-123" || payload["files"].([]string)[0] != files[0] {
+		t.Fatalf("incorrect drop routing: %#v", payload)
+	}
+	if fileDropPayload(nil, target) != nil {
+		t.Fatal("empty drops must not be broadcast")
+	}
+}

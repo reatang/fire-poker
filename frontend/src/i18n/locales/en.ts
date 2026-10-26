@@ -491,6 +491,7 @@ export default {
     saveFailed: 'Save failed',
   },
   alert: {
+    actionFailed: 'Action failed',
     dismiss: 'Dismiss alert',
     showDetails: 'Show details',
     hideDetails: 'Hide details',
@@ -521,6 +522,7 @@ export default {
     attachLimitCount: 'Up to {{max}} files per message',
     attachLimitSize: 'File must be at most {{mb}}MB',
     dropFiles: 'Drop files to attach',
+    attachFailed: 'Could not attach the file',
     manageToolsPlugins: 'Manage Tools & Plugins',
     toolCategories: {
       builtin: 'Built-in Tools',

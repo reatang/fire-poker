@@ -16,6 +16,7 @@ import { InteractiveTerminalBlock } from '@/components/chat/InteractiveTerminalB
 import { File as FileBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/file'
 import type { DisplayMessage } from '@/types'
 import { cn } from '@/lib/utils'
+import { openExternalURL, reportInteropError } from '@/lib/runtimeInterop'
 import {
   getInteractiveTerminalState,
   isInteractiveTerminalControl,
@@ -229,6 +230,11 @@ export const MessageItem = memo(function MessageItem({
                     target="_blank"
                     rel="noreferrer"
                     {...props}
+                    onClick={(event) => {
+                      if (!props.href || props.href.startsWith('#')) return
+                      event.preventDefault()
+                      void openExternalURL(props.href).catch(reportInteropError)
+                    }}
                   >
                     {children}
                   </a>

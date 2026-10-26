@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { Flags } from '@wailsio/runtime'
 import { I18nextProvider } from 'react-i18next'
 import i18n from '@/i18n'
 import { ChatInput } from '@/components/chat/ChatInput'
@@ -13,6 +14,7 @@ vi.mock('@wailsio/runtime', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@wailsio/runtime')>()
   return {
     ...actual,
+    Flags: { GetFlag: vi.fn() },
     Events: {
       On: vi.fn((eventName: string, callback: (event?: unknown) => void) => {
         const listeners = eventListeners.get(eventName) ?? []
@@ -42,6 +44,7 @@ vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/file', () => ({
     ImagePreview: vi.fn().mockResolvedValue(null),
     SelectFile: vi.fn(),
     SaveTempFile: vi.fn(),
+    ValidateAttachment: vi.fn().mockResolvedValue({}),
   },
 }))
 
@@ -71,6 +74,7 @@ import { File as FileBinding } from '@bindings/github.com/reatang/fire-poker/bac
 
 beforeEach(() => {
   eventListeners.clear()
+  vi.mocked(Flags.GetFlag).mockReset()
   useChatStore.setState({
     conversations: [{
       id: 1, title: 't', kind: 'user' as const, createdAt: '', updatedAt: '',
@@ -205,6 +209,57 @@ describe('ChatInput drag-and-drop', () => {
     ;(FileBinding.SaveTempFile as ReturnType<typeof vi.fn>).mockReset()
   })
 
+  it.each(['before', 'after'])('adds only one chip when the native event arrives %s the DOM drop', async (order) => {
+    vi.mocked(Flags.GetFlag).mockReturnValue(true)
+    vi.mocked(FileBinding.SaveTempFile).mockResolvedValue({ file_path: '/tmp/copied-photo.png' })
+    renderInput()
+
+    const inputArea = document.querySelector('.chat-input-area')!
+    const file = new File(['image-data'], 'photo.png', { type: 'image/png' })
+    const dropEvent = new DragEvent('drop', { bubbles: true, cancelable: true })
+    Object.defineProperty(dropEvent, 'dataTransfer', {
+      value: { files: [file], types: ['Files'] },
+    })
+    const emitNativeDrop = () => {
+      for (const listener of eventListeners.get('files-dropped') ?? []) {
+        listener({ data: { files: ['/pictures/photo.png'], target: inputArea.getAttribute('data-composer-id') } })
+      }
+    }
+
+    await act(async () => {
+      if (order === 'before') emitNativeDrop()
+      inputArea.dispatchEvent(dropEvent)
+      if (order === 'after') emitNativeDrop()
+    })
+
+    expect(dropEvent.defaultPrevented).toBe(true)
+    expect(FileBinding.SaveTempFile).not.toHaveBeenCalled()
+    expect(screen.getAllByLabelText(/remove attachment|移除附件/i)).toHaveLength(1)
+    expect(screen.getByText('photo.png')).toBeInTheDocument()
+  })
+
+  it.each(['disabled', 'unavailable'])('imports DOM files when native file drops are %s', async (mode) => {
+    if (mode === 'disabled') {
+      vi.mocked(Flags.GetFlag).mockReturnValue(false)
+    } else {
+      vi.mocked(Flags.GetFlag).mockImplementation(() => { throw new Error('No Wails flags') })
+    }
+    vi.mocked(FileBinding.SaveTempFile).mockResolvedValue({ file_path: '/tmp/copied-photo.png' })
+    renderInput()
+
+    const inputArea = document.querySelector('.chat-input-area')!
+    const file = new File(['image-data'], 'photo.png', { type: 'image/png' })
+    const dropEvent = new DragEvent('drop', { bubbles: true, cancelable: true })
+    Object.defineProperty(dropEvent, 'dataTransfer', {
+      value: { files: [file], types: ['Files'] },
+    })
+    inputArea.dispatchEvent(dropEvent)
+
+    await waitFor(() => expect(screen.getByText('photo.png')).toBeInTheDocument())
+    expect(FileBinding.SaveTempFile).toHaveBeenCalledOnce()
+    expect(screen.getAllByLabelText(/remove attachment|移除附件/i)).toHaveLength(1)
+  })
+
   it('adds chip when a file is dropped on the input area', async () => {
     renderInput()
 
@@ -215,6 +270,7 @@ describe('ChatInput drag-and-drop', () => {
       listeners[0]({
         data: {
           files: ['/tmp/fire-poker/123-doc.pdf'],
+          target: document.querySelector('.chat-input-area')!.getAttribute('data-composer-id'),
         },
       })
     })

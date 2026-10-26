@@ -1,86 +1,109 @@
-import { useEffect, useRef, useState } from 'react'
-import { Events } from '@wailsio/runtime'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Events, Flags } from '@wailsio/runtime'
 import { File as FileBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/file'
 import { SelectFileInput, SaveTempFileInput } from '@bindings/github.com/reatang/fire-poker/backend/service/file/file_dto'
 import { ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_BYTES, blobToBase64, inferAttachmentMeta } from '@/lib/attachments'
+import { useAlertStore } from '@/alert/store'
+import { parseUnknownIError } from '@/lib/ierror'
+import i18n from '@/i18n'
 import type { Attachment } from '@/types'
 
-// useComposerAttachments owns the composer's pending attachments: the file picker, pasted files,
-// browser drops and macOS native window drops, all capped at ATTACHMENT_MAX_COUNT.
-export function useComposerAttachments() {
-  const [attachments, setAttachments] = useState<Attachment[]>([])
+function newDraft(key: number | null | undefined) {
+  // getRandomValues also works in WebKit webviews using a custom URL scheme.
+  const id = Array.from(crypto.getRandomValues(new Uint32Array(4)), value => value.toString(16).padStart(8, '0')).join('')
+  return { key, id, pending: 0 }
+}
+
+// Each draft has its own drop address and reservations for pending bridge calls.
+export function useComposerAttachments(draftKey?: number | null) {
+  const [attachments, updateAttachments] = useState<Attachment[]>([])
   const attachmentsRef = useRef<Attachment[]>([])
-  attachmentsRef.current = attachments
+  const draftRef = useRef(newDraft(draftKey))
+  const lifecycleRef = useRef(0)
+  if (draftRef.current.key !== draftKey) draftRef.current = newDraft(draftKey)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
+  const [pendingImports, setPendingImports] = useState(0)
 
-  useEffect(() => {
-    const offEnter = Events.On(Events.Types.Mac.WindowFileDraggingEntered, () => {
-      setIsDraggingOver(true)
-    })
-    const offExit = Events.On(Events.Types.Mac.WindowFileDraggingExited, () => {
-      setIsDraggingOver(false)
-    })
-    const offPerformed = Events.On(Events.Types.Mac.WindowFileDraggingPerformed, () => {
-      setIsDraggingOver(false)
-    })
-    const offDrop = Events.On('files-dropped', (event) => {
-      const payload = event.data as { files?: string[] } | null
-      const files = payload?.files ?? []
-      const remaining = ATTACHMENT_MAX_COUNT - attachmentsRef.current.length
-      const newAtts = files.slice(0, remaining).map(path => inferAttachmentMeta(path))
-      if (newAtts.length > 0) {
-        setAttachments(prev => [...prev, ...newAtts])
-      }
-    })
+  const setAttachments = useCallback((value: React.SetStateAction<Attachment[]>) => {
+    const next = typeof value === 'function' ? value(attachmentsRef.current) : value
+    if (next.length === 0) {
+      draftRef.current = newDraft(draftRef.current.key)
+      setPendingImports(0)
+    }
+    attachmentsRef.current = next
+    updateAttachments(next)
+  }, [])
 
-    return () => {
-      offEnter()
-      offExit()
-      offPerformed()
-      offDrop()
+  useEffect(() => () => {
+    lifecycleRef.current += 1
+  }, [])
+
+  const importAttachments = useCallback(async (tasks: Array<() => Promise<Attachment>>) => {
+    const draft = draftRef.current
+    const lifecycle = lifecycleRef.current
+    const remaining = ATTACHMENT_MAX_COUNT - attachmentsRef.current.length - draft.pending
+    const accepted = tasks.slice(0, Math.max(0, remaining))
+    if (accepted.length === 0) return
+    draft.pending += accepted.length
+    setPendingImports(draft.pending)
+    const results = await Promise.allSettled(accepted.map(task => task()))
+    draft.pending -= accepted.length
+    if (draftRef.current !== draft || lifecycleRef.current !== lifecycle) return
+    setPendingImports(draft.pending)
+
+    const added = results.flatMap(result => result.status === 'fulfilled' ? [result.value] : [])
+    if (added.length > 0) {
+      const next = [...attachmentsRef.current, ...added].slice(0, ATTACHMENT_MAX_COUNT)
+      attachmentsRef.current = next
+      updateAttachments(next)
+    }
+    const failed = results.find(result => result.status === 'rejected' && !(result.reason instanceof CancelledSelection))
+    if (failed?.status === 'rejected') {
+      useAlertStore.getState().pushAlert({
+        kind: 'error', placement: 'toast', title: i18n.t('input.attach'),
+        message: parseUnknownIError(failed.reason).msg,
+      })
     }
   }, [])
 
-  const handleAttach = async () => {
-    if (attachments.length >= ATTACHMENT_MAX_COUNT) return
+  const importPaths = useCallback((paths: string[]) => importAttachments(paths.map(path => async () => {
+    await FileBinding.ValidateAttachment({ path })
+    return inferAttachmentMeta(path)
+  })), [importAttachments])
+
+  useEffect(() => Events.On('files-dropped', (event) => {
+    const payload = event.data as { files?: string[]; target?: string } | null
+    if (payload?.target !== draftRef.current.id) return
+    setIsDraggingOver(false)
+    void importPaths(payload.files ?? [])
+  }), [importPaths])
+
+  const handleAttach = () => importAttachments([async () => {
     const result = await FileBinding.SelectFile(new SelectFileInput())
-    if (!result?.file_path) return
-    setAttachments(prev => [...prev, inferAttachmentMeta(result.file_path)])
-  }
+    if (!result?.file_path) throw new CancelledSelection()
+    await FileBinding.ValidateAttachment({ path: result.file_path })
+    return inferAttachmentMeta(result.file_path)
+  }])
+
+  const importFiles = (files: File[]) => importAttachments(files.map(file => async () => {
+    if (file.size > ATTACHMENT_MAX_BYTES) {
+      throw new Error(i18n.t('input.attachLimitSize', { mb: ATTACHMENT_MAX_BYTES / 1024 / 1024 }))
+    }
+    const name = file.name || `pasted-${Date.now()}.${file.type.split('/')[1] ?? 'bin'}`
+    const data = await blobToBase64(file)
+    const result = await FileBinding.SaveTempFile(new SaveTempFileInput({
+      name, data, mime: file.type || 'application/octet-stream',
+    }))
+    if (!result?.file_path) throw new Error(i18n.t('input.attachFailed'))
+    return { ...inferAttachmentMeta(result.file_path), name }
+  }))
 
   const handlePaste = async (event: React.ClipboardEvent<HTMLDivElement>) => {
-    const items = Array.from(event.clipboardData.items)
-    const fileItems = items.filter(item => item.kind === 'file')
-    if (fileItems.length === 0) return
-
+    const items = Array.from(event.clipboardData.items).filter(item => item.kind === 'file')
+    if (items.length === 0) return
     event.preventDefault()
-
-    const remaining = ATTACHMENT_MAX_COUNT - attachmentsRef.current.length
-    const toProcess = fileItems.slice(0, remaining).map(item => {
-      const blob = item.getAsFile()
-      if (!blob) return null
-      if (blob.size > ATTACHMENT_MAX_BYTES) return null
-      const name = blob.name || `pasted-${Date.now()}.${item.type.split('/')[1] ?? 'bin'}`
-      return { blob, name, mime: item.type || 'application/octet-stream' }
-    }).filter((x): x is NonNullable<typeof x> => x !== null)
-
-    const results = await Promise.allSettled(
-      toProcess.map(async ({ blob, name, mime }) => {
-        const data = await blobToBase64(blob)
-        const result = await FileBinding.SaveTempFile(new SaveTempFileInput({ name, data, mime }))
-        if (!result?.file_path) throw new Error('no path')
-        const att = inferAttachmentMeta(result.file_path)
-        return { ...att, name }
-      })
-    )
-
-    const newAtts = results
-      .filter((r): r is PromiseFulfilledResult<Attachment> => r.status === 'fulfilled')
-      .map(r => r.value)
-
-    if (newAtts.length > 0) {
-      setAttachments(prev => [...prev, ...newAtts])
-    }
+    const files = items.map(item => item.getAsFile()).filter((file): file is File => file !== null)
+    await importFiles(files)
   }
 
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
@@ -90,47 +113,26 @@ export function useComposerAttachments() {
   }
 
   const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
-    if ((event.currentTarget as HTMLDivElement).contains(event.relatedTarget as Node)) return
+    if (event.currentTarget.contains(event.relatedTarget as Node)) return
     setIsDraggingOver(false)
   }
 
   const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     setIsDraggingOver(false)
-
-    const dropped = Array.from(event.dataTransfer.files)
-    const remaining = ATTACHMENT_MAX_COUNT - attachmentsRef.current.length
-    const toProcess = dropped.slice(0, remaining).filter(file => file.size <= ATTACHMENT_MAX_BYTES)
-
-    const results = await Promise.allSettled(
-      toProcess.map(async (file) => {
-        const data = await blobToBase64(file)
-        const result = await FileBinding.SaveTempFile(
-          new SaveTempFileInput({ name: file.name, data, mime: file.type || 'application/octet-stream' })
-        )
-        if (!result?.file_path) throw new Error('no path')
-        const att = inferAttachmentMeta(result.file_path)
-        return { ...att, name: file.name }
-      })
-    )
-
-    const newAtts = results
-      .filter((r): r is PromiseFulfilledResult<Attachment> => r.status === 'fulfilled')
-      .map(r => r.value)
-
-    if (newAtts.length > 0) {
-      setAttachments(prev => [...prev, ...newAtts])
+    // Wails resolves original paths and addresses the event to this draft.
+    try {
+      if (Flags.GetFlag('enableFileDrop') === true) return
+    } catch {
+      // Browser previews have no native window flags.
     }
+    await importFiles(Array.from(event.dataTransfer.files))
   }
 
   return {
-    attachments,
-    setAttachments,
-    isDraggingOver,
-    handleAttach,
-    handlePaste,
-    handleDragOver,
-    handleDragLeave,
-    handleDrop,
+    attachments, setAttachments, composerId: draftRef.current.id, isDraggingOver, isImporting: pendingImports > 0,
+    handleAttach, handlePaste, handleDragOver, handleDragLeave, handleDrop,
   }
 }
+
+class CancelledSelection extends Error {}

@@ -55,6 +55,15 @@ export function SelectFolder(input: file_dto$0.SelectFolderInput): $CancellableP
     });
 }
 
+/**
+ * ValidateAttachment checks native file paths before they enter a composer draft.
+ */
+export function ValidateAttachment(input: file_dto$0.OpenFileInput): $CancellablePromise<file_dto$0.OpenFileOutput | null> {
+    return $Call.ByID(3924229734, input).then(($result: any) => {
+        return $$createType3($result);
+    });
+}
+
 // Private type creation functions
 const $$createType0 = file_dto$0.ImagePreviewOutput.createFrom;
 const $$createType1 = $Create.Nullable($$createType0);
