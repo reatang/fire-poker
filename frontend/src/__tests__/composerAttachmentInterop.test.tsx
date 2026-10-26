@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { useComposerAttachments } from '@/components/chat/input/useComposerAttachments'
 import { File as FileBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/file'
+import { Agent as AgentBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/agent'
 import { inferAttachmentMeta } from '@/lib/attachments'
 import { useAlertStore } from '@/alert/store'
 
@@ -21,6 +22,9 @@ vi.mock('@wailsio/runtime', () => ({
 vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/file', () => ({
   File: { SaveTempFile: vi.fn(), SelectFile: vi.fn(), ValidateAttachment: vi.fn() },
 }))
+vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/agent', () => ({
+  Agent: { StoreAttachments: vi.fn() },
+}))
 
 beforeEach(() => {
   listeners.clear()
@@ -28,6 +32,12 @@ beforeEach(() => {
   vi.mocked(FileBinding.SelectFile).mockReset()
   vi.mocked(FileBinding.ValidateAttachment).mockReset().mockResolvedValue({})
   useAlertStore.getState().reset()
+  vi.mocked(AgentBinding.StoreAttachments).mockReset().mockImplementation(input => Promise.resolve({
+    attachments: input.attachments.map(attachment => ({
+      path: `/sessions/${input.session_id}/attachments/${attachment.name}`,
+      name: attachment.name || 'photo.png', mime: attachment.mime || 'image/png', kind: 'image',
+    })),
+  }) as ReturnType<typeof AgentBinding.StoreAttachments>)
 })
 
 function pasteEvent() {
@@ -55,6 +65,7 @@ it('routes native drops to one composer and ignores unaddressed or foreign drops
   await waitFor(() => expect(second.result.current.attachments).toHaveLength(1))
   expect(first.result.current.attachments).toHaveLength(0)
   expect(FileBinding.ValidateAttachment).toHaveBeenCalledTimes(1)
+  expect(second.result.current.attachments[0].path).toBe('/sessions/2/attachments/photo.png')
 })
 
 it('keeps native drop addresses valid after StrictMode effect replay', async () => {
@@ -119,4 +130,24 @@ it('releases a file picker reservation after cancellation', async () => {
   await act(async () => { await hook.result.current.handleAttach() })
   expect(hook.result.current.isImporting).toBe(false)
   expect(useAlertStore.getState().toasts).toHaveLength(0)
+})
+
+it('creates one session for concurrent new-chat uploads and preserves the draft during adoption', async () => {
+  const createSession = vi.fn().mockResolvedValue(73)
+  const onSessionCreated = vi.fn()
+  const hook = renderHook(({ session }: { session: number | null }) => useComposerAttachments(session, {
+    createSession, onSessionCreated,
+  }), { initialProps: { session: null as number | null } })
+  const scope = hook.result.current.draftScopeId
+  vi.mocked(FileBinding.SaveTempFile).mockResolvedValue({ file_path: '/tmp/photo.png' })
+  await act(async () => {
+    await Promise.all([hook.result.current.handlePaste(pasteEvent()), hook.result.current.handlePaste(pasteEvent())])
+  })
+  expect(createSession).toHaveBeenCalledOnce()
+  expect(onSessionCreated).toHaveBeenCalledExactlyOnceWith(73)
+  hook.rerender({ session: 73 })
+  expect(hook.result.current.draftScopeId).toBe(scope)
+  expect(hook.result.current.attachments).toHaveLength(2)
+  expect(hook.result.current.attachments.every(attachment => attachment.path.startsWith('/sessions/73/attachments/'))).toBe(true)
+  expect(AgentBinding.StoreAttachments).toHaveBeenCalledTimes(2)
 })

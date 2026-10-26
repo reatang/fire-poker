@@ -89,6 +89,7 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
     attachments,
     setAttachments,
     composerId,
+    draftScopeId,
     isImporting,
     isDraggingOver,
     handleAttach,
@@ -96,7 +97,14 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
     handleDragOver,
     handleDragLeave,
     handleDrop,
-  } = useComposerAttachments(targetSessionId)
+  } = useComposerAttachments(targetSessionId, {
+    createSession: async () => {
+      const id = await createConversation()
+      if (id && draftToolIds !== null) await useChatStore.getState().saveSessionTools(id, draftToolIds)
+      return id
+    },
+    onSessionCreated: setCurrentConversation,
+  })
   const defaultToolIds = useAppStore(state => state.enabledToolIds)
   const sessionToolIds = useChatStore(state => targetSessionId ? state.sessionToolIds[targetSessionId] : undefined)
   const selectedToolIds = targetSessionId ? (sessionToolIds ?? []) : (draftToolIds ?? defaultToolIds)
@@ -244,7 +252,7 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
     setIsEmpty(true)
     setAttachments([])
     setDraftToolIds(null)
-  }, [targetSessionId, editor, setAttachments])
+  }, [draftScopeId, editor, setAttachments])
 
 
 

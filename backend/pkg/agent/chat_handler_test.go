@@ -523,7 +523,7 @@ func TestSendMessagePersistsAttachmentsAndBuildsMultimodal(t *testing.T) {
 		t.Fatalf("write png: %v", err)
 	}
 
-	err = handler.SendMessage(context.Background(), SendMessageParams{
+	storedAttachments, err := handler.SendMessageWithAttachments(context.Background(), SendMessageParams{
 		SessionID:  session.ID,
 		Content:    "describe",
 		ProviderID: providerID,
@@ -552,6 +552,9 @@ func TestSendMessagePersistsAttachmentsAndBuildsMultimodal(t *testing.T) {
 	wantDir := filepath.Join(manager.SessionWorkDir(session.ID), sessionAttachmentsDir)
 	if filepath.Dir(got[0].Path) != wantDir {
 		t.Fatalf("attachment should be copied into %s, got %s", wantDir, got[0].Path)
+	}
+	if len(storedAttachments) != 1 || storedAttachments[0].Path != got[0].Path {
+		t.Fatalf("returned attachment paths differ from persisted paths: %+v", storedAttachments)
 	}
 	if err := os.Remove(imgPath); err != nil {
 		t.Fatalf("remove original: %v", err)

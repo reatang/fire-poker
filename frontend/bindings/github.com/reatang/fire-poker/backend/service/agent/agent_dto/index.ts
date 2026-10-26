@@ -37,6 +37,8 @@ export {
     SpawnTaskSessionOutput,
     StopGenerationInput,
     StopGenerationOutput,
+    StoreAttachmentsInput,
+    StoreAttachmentsOutput,
     ToggleStarSessionInput,
     ToggleStarSessionOutput,
     UpdateSessionPromptInput

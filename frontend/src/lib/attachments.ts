@@ -47,6 +47,12 @@ export function inferAttachmentMeta(path: string): Attachment {
   return { path, name, mime, kind }
 }
 
+export function attachmentFromStored(value: { path: string; name?: string; mime?: string }): Attachment {
+  const inferred = inferAttachmentMeta(value.path)
+  const mime = value.mime || inferred.mime
+  return { path: value.path, name: value.name || inferred.name, mime, kind: mime.startsWith('image/') ? 'image' : 'file' }
+}
+
 export function isImageMime(mime: string): boolean {
   return mime.startsWith('image/')
 }

@@ -43,7 +43,7 @@ func (a *Agent) SendMessage(ctx context.Context, input agent_dto.SendMessageInpu
 	}
 
 	handler := a.manager.NewChatHandler()
-	err = handler.SendMessage(ctx, pkgAgent.SendMessageParams{
+	stored, err := handler.SendMessageWithAttachments(ctx, pkgAgent.SendMessageParams{
 		RegenerateMessageID: input.RegenerateMessageID,
 		SessionID:           input.SessionID,
 		Content:             input.Content,
@@ -57,7 +57,7 @@ func (a *Agent) SendMessage(ctx context.Context, input agent_dto.SendMessageInpu
 	if err != nil {
 		return nil, agentError(ierror.ErrAgentSendMessage, err)
 	}
-	return &agent_dto.SendMessageOutput{}, nil
+	return &agent_dto.SendMessageOutput{Attachments: stored}, nil
 }
 
 func (a *Agent) StopGeneration(ctx context.Context, input agent_dto.StopGenerationInput) (*agent_dto.StopGenerationOutput, error) {

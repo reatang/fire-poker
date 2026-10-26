@@ -1,5 +1,6 @@
 import i18n from '../../i18n'
 import { preferredModel } from '@/lib/modelSelection'
+import { attachmentFromStored } from '@/lib/attachments'
 import { useModelSelectionStore } from '../modelSelectionStore'
 import { Agent as AgentBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/agent'
 import { EMPTY_STREAMING_MESSAGE, isStreamingStatus, parseIError } from './helpers'
@@ -121,7 +122,7 @@ export function createTurnSlice(set: ChatSet, get: ChatGet, buffer: StreamingBuf
       }))
 
       try {
-        await AgentBinding.SendMessage({
+        const result = await AgentBinding.SendMessage({
           session_id: params.sessionId,
           ...(params.regenerateMessageId ? { regenerate_message_id: params.regenerateMessageId } : {}),
           content: params.content,
@@ -136,6 +137,16 @@ export function createTurnSlice(set: ChatSet, get: ChatGet, buffer: StreamingBuf
             mime: att.mime,
           })),
         })
+        if (!params.regenerateMessageId && result?.attachments?.length) {
+          const attachments = result.attachments.map(attachmentFromStored)
+          set(state => ({
+            messages: {
+              ...state.messages,
+              [params.sessionId]: (state.messages[params.sessionId] ?? []).map(message =>
+                message.id === tempUserId ? { ...message, attachments } : message),
+            },
+          }))
+        }
       } catch (err: unknown) {
         const parsed = parseIError(err)
         set((state) => {

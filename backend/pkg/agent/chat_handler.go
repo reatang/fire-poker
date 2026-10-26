@@ -198,9 +198,15 @@ type preparedTurn struct {
 // SendMessage starts a streaming run and consumes events asynchronously.
 // Steps run in a fixed order: read-only preparation, prompt resolution, persistence, then the run.
 func (ch *ChatHandler) SendMessage(ctx context.Context, params SendMessageParams) error {
+	_, err := ch.SendMessageWithAttachments(ctx, params)
+	return err
+}
+
+// SendMessageWithAttachments returns the canonical paths used by storage and the model.
+func (ch *ChatHandler) SendMessageWithAttachments(ctx context.Context, params SendMessageParams) ([]Attachment, error) {
 	streamCtx, cancel, err := ch.manager.Streams().TryStart(context.WithoutCancel(ctx), params.SessionID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	started := false
 	defer func() {
@@ -212,15 +218,15 @@ func (ch *ChatHandler) SendMessage(ctx context.Context, params SendMessageParams
 
 	turn, err := ch.prepareTurn(&params)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	session, err := ch.resolveSessionPrompt(&params)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if turn.regenerationQuestionID == 0 {
 		if err := ch.persistUserMessage(&params); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
@@ -228,10 +234,10 @@ func (ch *ChatHandler) SendMessage(ctx context.Context, params SendMessageParams
 	ch.updateSessionStatus(params.SessionID, "loading")
 
 	if err := ch.startRun(streamCtx, cancel, params, turn, session); err != nil {
-		return err
+		return nil, err
 	}
 	started = true
-	return nil
+	return params.Attachments, nil
 }
 
 // prepareTurn resolves credentials and loads the turn's inputs without writing anything,

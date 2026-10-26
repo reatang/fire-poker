@@ -1,5 +1,7 @@
 package agent_dto
 
+import pkgAgent "github.com/reatang/fire-poker/backend/pkg/agent"
+
 // SendMessageInput selects the provider and model by identity; the backend resolves credentials.
 type SendMessageInput struct {
 	RegenerateMessageID uint              `json:"regenerate_message_id,omitempty"`
@@ -14,4 +16,5 @@ type SendMessageInput struct {
 }
 
 type SendMessageOutput struct {
+	Attachments []pkgAgent.Attachment `json:"attachments"`
 }

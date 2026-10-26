@@ -7,6 +7,7 @@ import i18n from '@/i18n'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { useChatStore } from '@/store/chatStore'
 import { ATTACHMENT_MAX_COUNT } from '@/lib/attachments'
+import { Agent as AgentBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/agent'
 
 const eventListeners = new Map<string, Array<(event?: unknown) => void>>()
 
@@ -48,6 +49,17 @@ vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/file', () => ({
   },
 }))
 
+vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/agent', () => ({
+  Agent: {
+    StoreAttachments: vi.fn(async (input: { session_id: number; attachments: Array<{ path: string; name: string; mime: string }> }) => ({
+      attachments: input.attachments.map(attachment => ({ ...attachment, path: `/sessions/${input.session_id}/attachments/${attachment.name}`, kind: 'image' })),
+    })),
+    CreateSession: vi.fn(),
+    GetSessionToolSettings: vi.fn().mockResolvedValue({ tool_ids: [] }),
+    SaveSessionToolSettings: vi.fn().mockResolvedValue({ tool_ids: [] }),
+  },
+}))
+
 vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/provider', () => ({
   Provider: {
     ProviderAndModelList: vi.fn().mockResolvedValue({
@@ -73,6 +85,9 @@ vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/plugin', () => 
 import { File as FileBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/file'
 
 beforeEach(() => {
+  // jsdom has no range geometry; ProseMirror reads it when typing into the editor.
+  if (!Range.prototype.getClientRects) Range.prototype.getClientRects = () => [] as unknown as DOMRectList
+  if (!Range.prototype.getBoundingClientRect) Range.prototype.getBoundingClientRect = () => new DOMRect()
   eventListeners.clear()
   vi.mocked(Flags.GetFlag).mockReset()
   useChatStore.setState({
@@ -89,6 +104,22 @@ function renderInput() {
 }
 
 describe('ChatInput attachments', () => {
+  it('creates a session on first upload without clearing the typed draft', async () => {
+    useChatStore.setState({ currentConversationId: null, conversations: [] })
+    vi.mocked(AgentBinding.CreateSession).mockResolvedValueOnce({ session_id: 73, title: 'New Chat', tags: [] })
+    vi.mocked(FileBinding.SelectFile).mockResolvedValueOnce({ file_path: '/source/photo.png' })
+    const user = userEvent.setup()
+    const { container } = renderInput()
+    const editor = container.querySelector('.tiptap')!
+    await user.click(editor)
+    await user.keyboard('keep my draft')
+    await user.click(screen.getByLabelText(/attach file|附加文件/i))
+    await screen.findByText('photo.png')
+    expect(useChatStore.getState().currentConversationId).toBe(73)
+    expect(editor).toHaveTextContent('keep my draft')
+    expect(AgentBinding.StoreAttachments).toHaveBeenCalledWith(expect.objectContaining({ session_id: 73 }))
+    expect(FileBinding.ImagePreview).toHaveBeenCalledWith({ path: '/sessions/73/attachments/photo.png' })
+  })
   it('adds a chip when SelectFile returns a path', async () => {
     ;(FileBinding.SelectFile as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ file_path: '/x/foo.png' })
     const user = userEvent.setup()

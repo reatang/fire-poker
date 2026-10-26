@@ -149,9 +149,18 @@ export function StopGeneration(input: agent_dto$0.StopGenerationInput): $Cancell
     });
 }
 
+/**
+ * StoreAttachments persists uploads before returning paths for preview and sending.
+ */
+export function StoreAttachments(input: agent_dto$0.StoreAttachmentsInput): $CancellablePromise<agent_dto$0.StoreAttachmentsOutput | null> {
+    return $Call.ByID(2122628648, input).then(($result: any) => {
+        return $$createType33($result);
+    });
+}
+
 export function ToggleStarSession(input: agent_dto$0.ToggleStarSessionInput): $CancellablePromise<agent_dto$0.ToggleStarSessionOutput | null> {
     return $Call.ByID(266756995, input).then(($result: any) => {
-        return $$createType33($result);
+        return $$createType35($result);
     });
 }
 
@@ -197,5 +206,7 @@ const $$createType28 = agent_dto$0.SpawnTaskSessionOutput.createFrom;
 const $$createType29 = $Create.Nullable($$createType28);
 const $$createType30 = agent_dto$0.StopGenerationOutput.createFrom;
 const $$createType31 = $Create.Nullable($$createType30);
-const $$createType32 = agent_dto$0.ToggleStarSessionOutput.createFrom;
+const $$createType32 = agent_dto$0.StoreAttachmentsOutput.createFrom;
 const $$createType33 = $Create.Nullable($$createType32);
+const $$createType34 = agent_dto$0.ToggleStarSessionOutput.createFrom;
+const $$createType35 = $Create.Nullable($$createType34);

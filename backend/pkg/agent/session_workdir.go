@@ -16,6 +16,22 @@ import (
 // sessionAttachmentsDir is the subdirectory of a session's working directory that holds its attachments.
 const sessionAttachmentsDir = "attachments"
 
+// StoreSessionAttachments gives uploaded files the same lifetime as their session,
+// before they are used for a preview or a message.
+func (m *Manager) StoreSessionAttachments(sessionID uint, atts []Attachment) ([]Attachment, error) {
+	if sessionID == 0 {
+		return nil, fmt.Errorf("attachments require a saved session")
+	}
+	if _, err := m.Storage().GetSession(sessionID); err != nil {
+		return nil, fmt.Errorf("load attachment session: %w", err)
+	}
+	workDir := m.SessionWorkDir(sessionID)
+	if workDir == "" {
+		return nil, fmt.Errorf("session %d has no attachment directory", sessionID)
+	}
+	return storeSessionAttachments(workDir, atts)
+}
+
 // SessionWorkDir returns the conversation's working directory, creating it on first use.
 // It returns "" for an unsaved session or when the directory cannot be created.
 func (m *Manager) SessionWorkDir(sessionID uint) string {

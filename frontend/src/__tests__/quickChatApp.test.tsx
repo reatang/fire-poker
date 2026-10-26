@@ -132,7 +132,7 @@ describe('QuickChatApp', () => {
       title: 'New Chat',
       tags: [],
     })
-    vi.mocked(AgentBinding.SendMessage).mockResolvedValue({})
+  vi.mocked(AgentBinding.SendMessage).mockResolvedValue({ attachments: [] })
     vi.mocked(Window.CloseQuickChat).mockResolvedValue({})
     vi.mocked(Window.SelectQuickChat).mockResolvedValue({})
     vi.mocked(RuntimeWindow.SetSize).mockResolvedValue(undefined)

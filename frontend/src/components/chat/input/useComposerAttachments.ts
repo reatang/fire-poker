@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Events, Flags } from '@wailsio/runtime'
 import { File as FileBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/file'
+import { Agent as AgentBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/agent'
 import { SelectFileInput, SaveTempFileInput } from '@bindings/github.com/reatang/fire-poker/backend/service/file/file_dto'
-import { ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_BYTES, blobToBase64, inferAttachmentMeta } from '@/lib/attachments'
+import { ATTACHMENT_MAX_COUNT, ATTACHMENT_MAX_BYTES, attachmentFromStored, blobToBase64, inferAttachmentMeta } from '@/lib/attachments'
 import { useAlertStore } from '@/alert/store'
 import { parseUnknownIError } from '@/lib/ierror'
 import i18n from '@/i18n'
@@ -11,23 +12,36 @@ import type { Attachment } from '@/types'
 function newDraft(key: number | null | undefined) {
   // getRandomValues also works in WebKit webviews using a custom URL scheme.
   const id = Array.from(crypto.getRandomValues(new Uint32Array(4)), value => value.toString(16).padStart(8, '0')).join('')
-  return { key, id, pending: 0 }
+  return { key, id, scopeId: id, pending: 0, sessionId: key ?? undefined, sessionPromise: null as Promise<number> | null }
+}
+
+type SessionOptions = {
+  createSession: () => Promise<number>
+  onSessionCreated: (sessionId: number) => void
 }
 
 // Each draft has its own drop address and reservations for pending bridge calls.
-export function useComposerAttachments(draftKey?: number | null) {
+export function useComposerAttachments(draftKey?: number | null, options?: SessionOptions) {
   const [attachments, updateAttachments] = useState<Attachment[]>([])
   const attachmentsRef = useRef<Attachment[]>([])
   const draftRef = useRef(newDraft(draftKey))
   const lifecycleRef = useRef(0)
-  if (draftRef.current.key !== draftKey) draftRef.current = newDraft(draftKey)
+  const optionsRef = useRef(options)
+  optionsRef.current = options
+  if (draftRef.current.key !== draftKey) {
+    if (draftRef.current.key == null && draftRef.current.sessionId === draftKey) {
+      draftRef.current.key = draftKey
+    } else {
+      draftRef.current = newDraft(draftKey)
+    }
+  }
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [pendingImports, setPendingImports] = useState(0)
 
   const setAttachments = useCallback((value: React.SetStateAction<Attachment[]>) => {
     const next = typeof value === 'function' ? value(attachmentsRef.current) : value
     if (next.length === 0) {
-      draftRef.current = newDraft(draftRef.current.key)
+      draftRef.current = { ...newDraft(draftRef.current.key), scopeId: draftRef.current.scopeId }
       setPendingImports(0)
     }
     attachmentsRef.current = next
@@ -46,7 +60,31 @@ export function useComposerAttachments(draftKey?: number | null) {
     if (accepted.length === 0) return
     draft.pending += accepted.length
     setPendingImports(draft.pending)
-    const results = await Promise.allSettled(accepted.map(task => task()))
+    const active = () => draftRef.current === draft && lifecycleRef.current === lifecycle
+    const ensureSession = async () => {
+      if (!active()) throw new CancelledSelection()
+      if (draft.sessionId) return draft.sessionId
+      if (!draft.sessionPromise) {
+        const sessionOptions = optionsRef.current
+        if (!sessionOptions) throw new Error(i18n.t('input.attachFailed'))
+        draft.sessionPromise = sessionOptions.createSession().then(sessionId => {
+          if (!active()) throw new CancelledSelection()
+          if (!sessionId) throw new Error(i18n.t('input.attachFailed'))
+          draft.sessionId = sessionId
+          sessionOptions.onSessionCreated(sessionId)
+          return sessionId
+        }).catch(error => { draft.sessionPromise = null; throw error })
+      }
+      return draft.sessionPromise
+    }
+    const results = await Promise.allSettled(accepted.map(async task => {
+      const attachment = await task()
+      const sessionId = await ensureSession()
+      const stored = await AgentBinding.StoreAttachments({ session_id: sessionId, attachments: [attachment] })
+      const persisted = stored?.attachments[0]
+      if (!persisted) throw new Error(i18n.t('input.attachFailed'))
+      return attachmentFromStored(persisted)
+    }))
     draft.pending -= accepted.length
     if (draftRef.current !== draft || lifecycleRef.current !== lifecycle) return
     setPendingImports(draft.pending)
@@ -130,7 +168,8 @@ export function useComposerAttachments(draftKey?: number | null) {
   }
 
   return {
-    attachments, setAttachments, composerId: draftRef.current.id, isDraggingOver, isImporting: pendingImports > 0,
+    attachments, setAttachments, composerId: draftRef.current.id, draftScopeId: draftRef.current.scopeId,
+    isDraggingOver, isImporting: pendingImports > 0,
     handleAttach, handlePaste, handleDragOver, handleDragLeave, handleDrop,
   }
 }

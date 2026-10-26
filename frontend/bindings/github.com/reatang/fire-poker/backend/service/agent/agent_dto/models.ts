@@ -5,6 +5,10 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as agent$0 from "../../../pkg/agent/models.js";
+
 /**
  * AttachmentInput 是前端发送消息时携带的附件元数据。
  * Name/Mime 可空，后端通过 path 推断后写入存储与 model.Message。
@@ -719,9 +723,13 @@ export class SendMessageInput {
 }
 
 export class SendMessageOutput {
+    "attachments": agent$0.Attachment[];
 
     /** Creates a new SendMessageOutput instance. */
     constructor($$source: Partial<SendMessageOutput> = {}) {
+        if (!("attachments" in $$source)) {
+            this["attachments"] = [];
+        }
 
         Object.assign(this, $$source);
     }
@@ -730,7 +738,11 @@ export class SendMessageOutput {
      * Creates a new SendMessageOutput instance from a string or object.
      */
     static createFrom($$source: any = {}): SendMessageOutput {
+        const $$createField0_0 = $$createType8;
         let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("attachments" in $$parsedSource) {
+            $$parsedSource["attachments"] = $$createField0_0($$parsedSource["attachments"]);
+        }
         return new SendMessageOutput($$parsedSource as Partial<SendMessageOutput>);
     }
 }
@@ -1012,6 +1024,60 @@ export class StopGenerationOutput {
     }
 }
 
+export class StoreAttachmentsInput {
+    "session_id": number;
+    "attachments": AttachmentInput[];
+
+    /** Creates a new StoreAttachmentsInput instance. */
+    constructor($$source: Partial<StoreAttachmentsInput> = {}) {
+        if (!("session_id" in $$source)) {
+            this["session_id"] = 0;
+        }
+        if (!("attachments" in $$source)) {
+            this["attachments"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new StoreAttachmentsInput instance from a string or object.
+     */
+    static createFrom($$source: any = {}): StoreAttachmentsInput {
+        const $$createField1_0 = $$createType6;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("attachments" in $$parsedSource) {
+            $$parsedSource["attachments"] = $$createField1_0($$parsedSource["attachments"]);
+        }
+        return new StoreAttachmentsInput($$parsedSource as Partial<StoreAttachmentsInput>);
+    }
+}
+
+export class StoreAttachmentsOutput {
+    "attachments": agent$0.Attachment[];
+
+    /** Creates a new StoreAttachmentsOutput instance. */
+    constructor($$source: Partial<StoreAttachmentsOutput> = {}) {
+        if (!("attachments" in $$source)) {
+            this["attachments"] = [];
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new StoreAttachmentsOutput instance from a string or object.
+     */
+    static createFrom($$source: any = {}): StoreAttachmentsOutput {
+        const $$createField0_0 = $$createType8;
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        if ("attachments" in $$parsedSource) {
+            $$parsedSource["attachments"] = $$createField0_0($$parsedSource["attachments"]);
+        }
+        return new StoreAttachmentsOutput($$parsedSource as Partial<StoreAttachmentsOutput>);
+    }
+}
+
 export class ToggleStarSessionInput {
     "session_id": number;
     "starred": boolean;
@@ -1095,3 +1161,5 @@ const $$createType3 = MessageItem.createFrom;
 const $$createType4 = $Create.Array($$createType3);
 const $$createType5 = AttachmentInput.createFrom;
 const $$createType6 = $Create.Array($$createType5);
+const $$createType7 = agent$0.Attachment.createFrom;
+const $$createType8 = $Create.Array($$createType7);

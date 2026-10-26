@@ -72,6 +72,17 @@ beforeEach(() => {
 })
 
 describe('chatStore', () => {
+  it('replaces optimistic temporary attachment paths with the persisted session paths', async () => {
+    vi.mocked(AgentBinding.SendMessage).mockResolvedValueOnce({ attachments: [{
+      path: '/data/sessions/1/attachments/photo.png', name: 'photo.png', mime: 'image/png', kind: 'image',
+    }] })
+    await useChatStore.getState().sendMessage({
+      sessionId: 1, content: 'describe', providerId: 1, modelName: 'm', enabledUserTools: [],
+      attachments: [{ path: '/old/temp/photo.png', name: 'photo.png', mime: 'image/png', kind: 'image' }],
+    })
+    const question = useChatStore.getState().messages[1].find(message => message.role === 'user')
+    expect(question?.attachments?.[0].path).toBe('/data/sessions/1/attachments/photo.png')
+  })
   it('reloads the persisted partial answer after stopping and clears streaming state', async () => {
     vi.mocked(AgentBinding.StopGeneration).mockResolvedValue({})
     vi.mocked(AgentBinding.LoadSessionMessages).mockResolvedValueOnce({
@@ -700,7 +711,7 @@ describe('regeneration state', () => {
   ]
   const params = {sessionId:1, regenerateMessageId:102, content:'question', providerId:7, modelName:'m', enabledUserTools:[], attachments:[]}
   it('keeps one question while retrying and forwards the response ID', async () => {
-    vi.mocked(AgentBinding.SendMessage).mockResolvedValueOnce({})
+    vi.mocked(AgentBinding.SendMessage).mockResolvedValueOnce({ attachments: [] })
     useChatStore.setState({messages:{1:original},sessionStatuses:{1:'idle'}})
     await useChatStore.getState().sendMessage(params)
     const messages = useChatStore.getState().messages[1]
@@ -723,7 +734,7 @@ describe('regeneration state', () => {
       models: [{ id: id * 10, provider_id: id, model: 'm', owned_by: '', object: '', enable: true, alias: null, is_custom: false, is_default: false }],
     })
     vi.mocked(ProviderBinding.ProviderAndModelList).mockResolvedValueOnce({ provider_models: [providerModel(3), providerModel(7)] } as never)
-    vi.mocked(AgentBinding.SendMessage).mockResolvedValueOnce({})
+    vi.mocked(AgentBinding.SendMessage).mockResolvedValueOnce({ attachments: [] })
     useChatStore.setState({
       messages: { 1: original },
       sessionStatuses: { 1: 'idle' },

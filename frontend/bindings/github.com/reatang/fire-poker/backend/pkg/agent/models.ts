@@ -6,6 +6,47 @@
 import { Create as $Create } from "@wailsio/runtime";
 
 /**
+ * Attachment 表示一条用户消息携带的本地文件附件元数据。
+ * 只持久化路径与轻量元信息，文件本身不入库。
+ */
+export class Attachment {
+    "name": string;
+    "path": string;
+    "mime": string;
+
+    /**
+     * "image" or "file"
+     */
+    "kind": string;
+
+    /** Creates a new Attachment instance. */
+    constructor($$source: Partial<Attachment> = {}) {
+        if (!("name" in $$source)) {
+            this["name"] = "";
+        }
+        if (!("path" in $$source)) {
+            this["path"] = "";
+        }
+        if (!("mime" in $$source)) {
+            this["mime"] = "";
+        }
+        if (!("kind" in $$source)) {
+            this["kind"] = "";
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new Attachment instance from a string or object.
+     */
+    static createFrom($$source: any = {}): Attachment {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new Attachment($$parsedSource as Partial<Attachment>);
+    }
+}
+
+/**
  * SessionSpawnedEvent announces a task session created in the background.
  */
 export class SessionSpawnedEvent {
