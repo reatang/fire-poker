@@ -11,11 +11,11 @@
 	<key>CFBundleIdentifier</key>
 	<string>com.reatang.fire-poker.dev</string>
 	<key>CFBundleVersion</key>
-	<string>0.4.2</string>
+	<string>0.5.0</string>
 	<key>CFBundleGetInfoString</key>
 	<string>一个经典模式的智能体客户端</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.4.2</string>
+	<string>0.5.0</string>
 	<key>CFBundleIconFile</key>
 	<string>icons_dev</string>
 	<key>CFBundleIconName</key>
