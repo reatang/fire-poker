@@ -130,6 +130,17 @@ it('releases a file picker reservation after cancellation', async () => {
   await act(async () => { await hook.result.current.handleAttach() })
   expect(hook.result.current.isImporting).toBe(false)
   expect(useAlertStore.getState().toasts).toHaveLength(0)
+  expect(FileBinding.ValidateAttachment).not.toHaveBeenCalled()
+  expect(AgentBinding.StoreAttachments).not.toHaveBeenCalled()
+})
+
+it('still reports a real native file picker failure', async () => {
+  vi.mocked(FileBinding.SelectFile).mockRejectedValue(new Error('Native dialog unavailable'))
+  const hook = renderHook(() => useComposerAttachments(1))
+  await act(async () => { await hook.result.current.handleAttach() })
+  expect(hook.result.current.isImporting).toBe(false)
+  expect(hook.result.current.attachments).toHaveLength(0)
+  expect(useAlertStore.getState().toasts[0]?.message).toBe('Native dialog unavailable')
 })
 
 it('creates one session for concurrent new-chat uploads and preserves the draft during adoption', async () => {

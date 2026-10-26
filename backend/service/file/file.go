@@ -32,8 +32,12 @@ func (f *File) SelectFolder(ctx context.Context, input file_dto.SelectFolderInpu
 		CanChooseFiles(false).
 		PromptForSingleSelection()
 
-	if err != nil || path == "" {
+	path, err = normalizeDialogSelection(path, err)
+	if err != nil {
 		return nil, ierror.Error(ierror.ErrFileSelectFolder, err)
+	}
+	if path == "" {
+		return nil, nil
 	}
 
 	return &file_dto.SelectFolderOutput{FolderPath: path}, nil
@@ -49,8 +53,12 @@ func (f *File) SelectFile(ctx context.Context, input file_dto.SelectFileInput) (
 		SetDirectory(input.DefaultFolderPath).
 		CanChooseFiles(true).
 		PromptForSingleSelection()
-	if err != nil || path == "" {
+	path, err = normalizeDialogSelection(path, err)
+	if err != nil {
 		return nil, ierror.Error(ierror.ErrFileSelectFile, err)
+	}
+	if path == "" {
+		return nil, nil
 	}
 
 	return &file_dto.SelectFileOutput{FilePath: path}, nil
