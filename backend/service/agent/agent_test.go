@@ -266,6 +266,65 @@ func TestGenerateTitleUsesStoredCredentialsWithoutTools(t *testing.T) {
 	}
 }
 
+// TestGenerateTitleForImageOnlyQuestion covers a first turn whose question is just an image and
+// whose reply text sits behind thinking and tool rows: the preview must still reach the model.
+func TestGenerateTitleForImageOnlyQuestion(t *testing.T) {
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"猫咪照片"}}]}`))
+	}))
+	defer server.Close()
+
+	stor := newTestStorage(t)
+	svc := NewAgent(stor)
+	provider, err := stor.CreateProvider(data_models.Provider{
+		ProviderName: "test", ProviderType: "openai_compatibility", BaseUrl: server.URL, ApiKey: "stored-key", Enable: true,
+	})
+	if err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	session, err := stor.CreateSession(data_models.Session{Title: "New Chat"})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	attachments, err := pkgAgent.MarshalAttachments([]pkgAgent.Attachment{{Name: "cat.png", Path: "/tmp/cat.png", Mime: "image/png", Kind: "image"}})
+	if err != nil {
+		t.Fatalf("marshal attachments: %v", err)
+	}
+	rows := []data_models.Message{
+		{SessionID: session.ID, Role: "user", ContentType: "text", Attachments: attachments},
+		{SessionID: session.ID, Role: "assistant", ContentType: "thinking", Content: "看看图片"},
+		{SessionID: session.ID, Role: "assistant", ContentType: "tool_call", Content: "{}"},
+		{SessionID: session.ID, Role: "tool", ContentType: "tool_result", Content: "ok"},
+		{SessionID: session.ID, Role: "assistant", ContentType: "text", Content: "这是一只橘猫。"},
+	}
+	for _, row := range rows {
+		if _, err := stor.CreateMessage(row); err != nil {
+			t.Fatalf("create message: %v", err)
+		}
+	}
+
+	out, err := svc.GenerateTitle(context.Background(), agent_dto.GenerateTitleInput{
+		SessionID: session.ID, ProviderID: provider.ID, ModelName: "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("generate title: %v", err)
+	}
+	if out.Title != "猫咪照片" {
+		t.Fatalf("expected model title, got %q", out.Title)
+	}
+	body, _ := json.Marshal(gotBody)
+	for _, want := range []string{"cat.png", "这是一只橘猫"} {
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("title prompt should mention %q, got %s", want, body)
+		}
+	}
+}
+
 // TestGenerateTitleFallsBackForUnknownProvider keeps the previous non-fatal behavior on bad input.
 func TestGenerateTitleFallsBackForUnknownProvider(t *testing.T) {
 	stor := newTestStorage(t)

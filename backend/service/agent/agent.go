@@ -257,24 +257,13 @@ func (a *Agent) ToggleStarSession(ctx context.Context, input agent_dto.ToggleSta
 
 // GenerateTitle summarizes the opening turns into a session title with a single tool-free completion.
 func (a *Agent) GenerateTitle(ctx context.Context, input agent_dto.GenerateTitleInput) (*agent_dto.GenerateTitleOutput, error) {
-	msgs, err := a.manager.Storage().ListMessagesForSession(input.SessionID, 0, 4)
+	msgs, err := a.manager.Storage().ListMessagesForSession(input.SessionID, 0, titleScanMessages)
 	if err != nil || len(msgs) == 0 {
 		return &agent_dto.GenerateTitleOutput{Title: "New Chat"}, nil
 	}
 
-	var preview strings.Builder
-	for _, msg := range msgs {
-		if msg.ContentType != "text" || msg.Content == "" {
-			continue
-		}
-		content := msg.Content
-		if len(content) > 200 {
-			content = content[:200]
-		}
-		fmt.Fprintf(&preview, "%s: %s\n", msg.Role, content)
-	}
-
-	if preview.Len() == 0 {
+	preview := buildTitlePreview(msgs)
+	if preview == "" {
 		return &agent_dto.GenerateTitleOutput{Title: "New Chat"}, nil
 	}
 
@@ -286,7 +275,7 @@ func (a *Agent) GenerateTitle(ctx context.Context, input agent_dto.GenerateTitle
 
 	// A oneshot call binds no tools and creates no SDK session, so nothing lingers after the title returns.
 	resp, err := pkgAgent.OneshotComplete(ctx, cfg.ApplyTo(pkgAgent.OneshotRequest{
-		User:      buildTitlePrompt(preview.String()),
+		User:      buildTitlePrompt(preview),
 		MaxTokens: titleMaxTokens,
 		Timeout:   titleTimeout,
 	}))
@@ -307,7 +296,45 @@ func (a *Agent) GenerateTitle(ctx context.Context, input agent_dto.GenerateTitle
 const (
 	titleMaxTokens = 64
 	titleTimeout   = 30 * time.Second
+	// Thinking and tool rows can push the first reply text well past the opening rows.
+	titleScanMessages   = 20
+	titlePreviewTurns   = 4
+	titlePreviewMaxRune = 200
 )
+
+// buildTitlePreview renders the opening text turns, naming attachments so an image-only
+// question still gives the model something to title.
+func buildTitlePreview(msgs []data_models.Message) string {
+	var preview strings.Builder
+	turns := 0
+	for _, msg := range msgs {
+		if turns >= titlePreviewTurns {
+			break
+		}
+		if msg.ContentType != "text" {
+			continue
+		}
+		content := strings.TrimSpace(msg.Content)
+		if runes := []rune(content); len(runes) > titlePreviewMaxRune {
+			content = string(runes[:titlePreviewMaxRune])
+		}
+		if atts, err := pkgAgent.UnmarshalAttachments(msg.Attachments); err == nil {
+			for _, att := range atts {
+				kind := att.Kind
+				if kind == "" {
+					kind = "file"
+				}
+				content = strings.TrimSpace(fmt.Sprintf("%s [%s: %s]", content, kind, att.Name))
+			}
+		}
+		if content == "" {
+			continue
+		}
+		fmt.Fprintf(&preview, "%s: %s\n", msg.Role, content)
+		turns++
+	}
+	return preview.String()
+}
 
 func buildTitlePrompt(preview string) string {
 	titleInstruction, err := prompt.Load(prompt_id.GenChatTitle)
