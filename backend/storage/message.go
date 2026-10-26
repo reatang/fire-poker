@@ -58,6 +58,17 @@ func (s *Storage) ListMessagesForSession(sessionID uint, offset int, limit int) 
 	return msgs, nil
 }
 
+// ListOpeningTextMessages selects the first two question/answer rows without tool or thinking
+// rows consuming the limit. If the first question has no answer, the second row may be a question.
+func (s *Storage) ListOpeningTextMessages(sessionID uint) ([]data_models.Message, error) {
+	var msgs []data_models.Message
+	if err := s.sqliteDB.Where("session_id = ? AND content_type = ? AND role IN ?", sessionID, "text", []string{"user", "assistant"}).
+		Order("created_at ASC").Order("id ASC").Limit(2).Find(&msgs).Error; err != nil {
+		return nil, err
+	}
+	return msgs, nil
+}
+
 func (s *Storage) CountMessagesForSession(sessionID uint) (int64, error) {
 	var count int64
 	if err := s.sqliteDB.Model(&data_models.Message{}).Where("session_id = ?", sessionID).Count(&count).Error; err != nil {

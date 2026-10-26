@@ -261,7 +261,7 @@ func (a *Agent) ToggleStarSession(ctx context.Context, input agent_dto.ToggleSta
 
 // GenerateTitle summarizes the opening turns into a session title with a single tool-free completion.
 func (a *Agent) GenerateTitle(ctx context.Context, input agent_dto.GenerateTitleInput) (*agent_dto.GenerateTitleOutput, error) {
-	msgs, err := a.manager.Storage().ListMessagesForSession(input.SessionID, 0, titleScanMessages)
+	msgs, err := a.manager.Storage().ListOpeningTextMessages(input.SessionID)
 	if err != nil || len(msgs) == 0 {
 		return &agent_dto.GenerateTitleOutput{Title: "New Chat"}, nil
 	}
@@ -288,10 +288,7 @@ func (a *Agent) GenerateTitle(ctx context.Context, input agent_dto.GenerateTitle
 		return &agent_dto.GenerateTitleOutput{Title: "New Chat"}, nil
 	}
 
-	result := strings.TrimSpace(resp.Text)
-	if result == "" {
-		result = "New Chat"
-	}
+	result := normalizeGeneratedTitle(resp.Text)
 
 	_ = a.manager.Storage().UpdateSessionTitle(input.SessionID, result)
 	return &agent_dto.GenerateTitleOutput{Title: result}, nil
@@ -300,28 +297,27 @@ func (a *Agent) GenerateTitle(ctx context.Context, input agent_dto.GenerateTitle
 const (
 	titleMaxTokens = 64
 	titleTimeout   = 30 * time.Second
-	// Thinking and tool rows can push the first reply text well past the opening rows.
-	titleScanMessages   = 20
-	titlePreviewTurns   = 4
-	titlePreviewMaxRune = 200
+	titleMaxRunes  = 10
 )
 
-// buildTitlePreview renders the opening text turns, naming attachments so an image-only
-// question still gives the model something to title.
+// buildTitlePreview includes the complete first question and answer, naming attachments so
+// an image-only question still gives the model something to title.
 func buildTitlePreview(msgs []data_models.Message) string {
 	var preview strings.Builder
-	turns := 0
+	questionSeen := false
 	for _, msg := range msgs {
-		if turns >= titlePreviewTurns {
-			break
-		}
 		if msg.ContentType != "text" {
 			continue
 		}
-		content := strings.TrimSpace(msg.Content)
-		if runes := []rune(content); len(runes) > titlePreviewMaxRune {
-			content = string(runes[:titlePreviewMaxRune])
+		if msg.Role == "user" {
+			if questionSeen {
+				break
+			}
+			questionSeen = true
+		} else if msg.Role != "assistant" || !questionSeen {
+			continue
 		}
+		content := strings.TrimSpace(msg.Content)
 		if atts, err := pkgAgent.UnmarshalAttachments(msg.Attachments); err == nil {
 			for _, att := range atts {
 				kind := att.Kind
@@ -335,7 +331,9 @@ func buildTitlePreview(msgs []data_models.Message) string {
 			continue
 		}
 		fmt.Fprintf(&preview, "%s: %s\n", msg.Role, content)
-		turns++
+		if msg.Role == "assistant" {
+			break
+		}
 	}
 	return preview.String()
 }
@@ -343,10 +341,22 @@ func buildTitlePreview(msgs []data_models.Message) string {
 func buildTitlePrompt(preview string) string {
 	titleInstruction, err := prompt.Load(prompt_id.GenChatTitle)
 	if err != nil || strings.TrimSpace(titleInstruction) == "" {
-		titleInstruction = "Generate a concise title under 20 characters for this conversation. Return only the title."
+		titleInstruction = prompt.DefaultGenChatTitlePrompt
 	}
 
 	return fmt.Sprintf("%s\n\n%s", titleInstruction, preview)
+}
+
+func normalizeGeneratedTitle(text string) string {
+	title := strings.Trim(strings.TrimSpace(text), "\"'`“”‘’「」『』")
+	title = strings.Join(strings.Fields(title), " ")
+	if title == "" {
+		return "New Chat"
+	}
+	if runes := []rune(title); len(runes) > titleMaxRunes {
+		title = strings.TrimSpace(string(runes[:titleMaxRunes]))
+	}
+	return title
 }
 
 const (

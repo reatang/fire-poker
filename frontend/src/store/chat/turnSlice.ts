@@ -117,7 +117,7 @@ export function createTurnSlice(set: ChatSet, get: ChatGet, buffer: StreamingBuf
                 providerId: params.providerId,
                 modelName: params.modelName,
               }
-            : state.pendingTitleGenerations[params.sessionId],
+            : undefined,
         },
       }))
 
@@ -186,7 +186,12 @@ export function createTurnSlice(set: ChatSet, get: ChatGet, buffer: StreamingBuf
       set(state => {
         const next = { ...state.streamingMessages }
         delete next[sessionId]
-        return { streamingMessages: next, sessionStatuses: { ...state.sessionStatuses, [sessionId]: 'idle' }, pendingConfirms: { ...state.pendingConfirms, [sessionId]: null } }
+        return {
+          streamingMessages: next,
+          sessionStatuses: { ...state.sessionStatuses, [sessionId]: 'idle' },
+          pendingConfirms: { ...state.pendingConfirms, [sessionId]: null },
+          pendingTitleGenerations: { ...state.pendingTitleGenerations, [sessionId]: undefined },
+        }
       })
       await get().loadMessages(sessionId)
     },

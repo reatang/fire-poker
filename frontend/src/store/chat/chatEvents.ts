@@ -167,6 +167,10 @@ export function createInitEventListeners(set: ChatSet, get: ChatGet, buffer: Str
           delete nextStreaming[data.sessionId]
           return {
             streamingMessages: nextStreaming,
+            pendingTitleGenerations: {
+              ...state.pendingTitleGenerations,
+              [data.sessionId]: undefined,
+            },
             sessionStatuses: {
               ...state.sessionStatuses,
               [data.sessionId]: 'idle',
@@ -291,7 +295,9 @@ export function createInitEventListeners(set: ChatSet, get: ChatGet, buffer: Str
               [data.sessionId]: undefined,
             },
           }))
-          void get().generateTitle(data.sessionId, pendingTitleGeneration)
+          if (data.status === 'done-unread') {
+            void get().generateTitle(data.sessionId, pendingTitleGeneration)
+          }
         }
 
         if (data.sessionId === get().currentConversationId && shouldFinalizeCurrentConversation) {

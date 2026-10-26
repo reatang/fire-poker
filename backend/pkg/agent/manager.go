@@ -25,7 +25,7 @@ import (
 )
 
 const defaultMainAgentPrompt = prompt.DefaultMainAgentPrompt
-const defaultGenChatTitlePrompt = `Generate a concise title under 20 characters for this conversation. Return only the title.`
+const defaultGenChatTitlePrompt = prompt.DefaultGenChatTitlePrompt
 
 // ManagerDeps groups the optional application services tools depend on. They are fixed at
 // construction; a nil field leaves the corresponding tool unavailable.

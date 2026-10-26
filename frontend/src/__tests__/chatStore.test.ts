@@ -218,7 +218,7 @@ describe('chatStore', () => {
     expect(generateTitleMock).not.toHaveBeenCalled()
   })
 
-  it('generates a title only after the first response reaches a terminal state', async () => {
+  it('generates a title once after the first response completes and leaves it unchanged on later turns', async () => {
     const id = await useChatStore.getState().createConversation()
     const generateTitleMock = vi.mocked(AgentBinding.GenerateTitle)
     generateTitleMock.mockClear()
@@ -258,6 +258,53 @@ describe('chatStore', () => {
       provider_id: 7,
       model_name: 'gpt-test',
     })
+
+    await useChatStore.getState().sendMessage({
+      sessionId: id,
+      content: 'follow-up question',
+      providerId: 7,
+      modelName: 'gpt-test',
+      enabledUserTools: [],
+      attachments: [],
+    })
+    eventHandlers.get('agent:session:status')?.({ data: { sessionId: id, status: 'done-unread' } })
+    eventHandlers.get('agent:session:status')?.({ data: { sessionId: id, status: 'done-unread' } })
+    expect(generateTitleMock).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(['error', 'interrupted', 'stopped'] as const)('does not defer title generation to later turns after the first response is %s', async (outcome) => {
+    const id = await useChatStore.getState().createConversation()
+    const generateTitleMock = vi.mocked(AgentBinding.GenerateTitle)
+    generateTitleMock.mockClear()
+    useChatStore.getState().initEventListeners()
+    const params = {
+      sessionId: id,
+      content: 'first question',
+      providerId: 7,
+      modelName: 'gpt-test',
+      enabledUserTools: [],
+      attachments: [],
+    }
+    await useChatStore.getState().sendMessage(params)
+    vi.mocked(AgentBinding.LoadSessionMessages).mockResolvedValueOnce({
+      messages: [{ id: 1, session_id: id, parent_id: null, role: 'user', content_type: 'text', content: 'first question', model_name: '', agent_name: '', tokens_in: 0, tokens_out: 0, extra: '', attachments: '', created: new Date().toISOString() }],
+      total: 1, has_more: false,
+    })
+    if (outcome === 'error') {
+      eventHandlers.get('agent:session:status')?.({ data: { sessionId: id, status: 'error-unread' } })
+    } else if (outcome === 'interrupted') {
+      eventHandlers.get('agent:stream:done')?.({ data: { sessionId: id, interrupted: true } })
+      // Wait for the persisted first question to finish loading before the next turn.
+      await Promise.resolve()
+    } else {
+      await useChatStore.getState().stopGeneration(id)
+    }
+    expect(generateTitleMock).not.toHaveBeenCalled()
+    expect(useChatStore.getState().pendingTitleGenerations[id]).toBeUndefined()
+
+    await useChatStore.getState().sendMessage({ ...params, content: 'follow-up question' })
+    eventHandlers.get('agent:session:status')?.({ data: { sessionId: id, status: 'done-unread' } })
+    expect(generateTitleMock).not.toHaveBeenCalled()
   })
 
   it('initEventListeners appends stream chunks from Wails event data', () => {
