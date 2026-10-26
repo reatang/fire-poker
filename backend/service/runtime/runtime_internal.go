@@ -246,6 +246,10 @@ func downloadArchive(ctx context.Context, url, dest string, report func(received
 			return "", readErr
 		}
 	}
+	// The hash covers the streamed bytes, so a failed flush on Close would otherwise pass verification.
+	if err := out.Close(); err != nil {
+		return "", err
+	}
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 

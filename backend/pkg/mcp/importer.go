@@ -40,9 +40,12 @@ func copyDirectory(sourceDir string, targetDir string) error {
 		if err != nil {
 			return err
 		}
-		defer targetFile.Close()
 
-		_, err = io.Copy(targetFile, sourceFile)
-		return err
+		// A failed Close can mean the copy never reached disk, so it must not be ignored.
+		if _, err := io.Copy(targetFile, sourceFile); err != nil {
+			_ = targetFile.Close()
+			return err
+		}
+		return targetFile.Close()
 	})
 }

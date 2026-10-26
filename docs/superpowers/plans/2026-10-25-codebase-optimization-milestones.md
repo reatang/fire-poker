@@ -31,7 +31,7 @@ cd frontend && npx tsc --noEmit && npx vitest run
 | M3 | 配置仓库与 SQLite 并发（已完成） | P1 | M1（同改 `lookupToolMeta`） | 否 |
 | M4 | 后端结构整理与 i18n（已完成） | P2 | M2、M3 | 是（事件类型） |
 | M5 | 前端结构整理与国际化（已完成） | P2 | M2（同改 `chatStore`） | 否 |
-| M6 | 静态检查进 CI | P3 | M4、M5 | 否 |
+| M6 | 静态检查进 CI（已完成） | P3 | M4、M5 | 否 |
 
 M1 与 M2 改动的文件基本不重叠，可以并行；M5 可以在 M2 合并后与 M3/M4 并行。
 
@@ -318,11 +318,27 @@ M1 与 M2 改动的文件基本不重叠，可以并行；M5 可以在 M2 合并
 
 ## M6：静态检查进 CI（P3）
 
-- [ ] 前端加 ESLint（`@typescript-eslint`，开启 `no-explicit-any`），先修存量问题再进 CI。
-- [ ] 后端加 `golangci-lint`（先启用 `govet`、`staticcheck`、`errcheck`、`ineffassign`），配置写进 `.golangci.yml`。
-- [ ] `.github/workflows/release-build.yml` 的测试 job 增加两项检查；`Taskfile.yml` 的 `check` 任务同步加入。
+> **状态：已完成**（2026-10-26，分支 `optimize-m6-lint`，基于 M5 单独开 PR）。
 
-**验收：** PR 上 lint 检查通过；本地 `task check` 与 CI 一致。
+- [x] 前端接入 ESLint 10 flat config（`frontend/eslint.config.js`）：`@eslint/js` 与 `typescript-eslint` 的 recommended 规则、`no-explicit-any` 设为 error，`react-hooks` 只启用经典的 `rules-of-hooks` / `exhaustive-deps` 两条。`npm run lint` 带 `--max-warnings 0`，警告同样会导致失败。依赖版本固定为发布满两周的版本：`eslint@10.12.0`、`@eslint/js@10.0.1`、`typescript-eslint@8.71.1`、`eslint-plugin-react-hooks@7.1.1`、`globals@17.13.0`。
+- [x] 修完前端全部 19 处存量问题：
+  - 6 处 `any`：两处绑定调用上的 `as any` 本来就是多余的；tiptap Suggestion 的参数补上 `Editor` / `Range` 类型；测试里的 markdown 渲染函数给出精确签名。
+  - `SystemPromptSettings` 的 `promptLabel` 改为模块级函数，effect 的依赖如实声明；`ChatInput` 补上稳定的 `setAttachments` 依赖。
+  - 有意为之的写法加 disable 注释并写明原因：两处 ANSI 转义正则；`useAutoScroll` 由调用方传入依赖数组；`ShortcutSettingsView` 只在开始/结束录制时重新订阅键盘事件。
+  - 删除 3 条已经不起作用的 disable 注释；`vite.config.ts` 不在 tsc 检查范围内，单独关闭 `ban-ts-comment`。
+- [x] 后端接入 golangci-lint v2.14.0（`.golangci.yml`），启用 `govet`、`staticcheck`、`errcheck`、`ineffassign`、`unused`。存量 65 处（macOS）加上 5 处只在 Windows 下出现：
+  - **2 处真问题**：Node 运行时下载写入后的 `Close`、MCP 导入复制文件后的 `Close` 原来都被忽略。前者的 SHA256 是对数据流算的，写盘失败也能通过校验；后者会悄悄留下被截断的文件。现在都显式检查错误。
+  - errcheck 统一豁免只读或清理性质的 `Close` / `Remove`（含 `CloseHandle`），测试文件不做 errcheck；配置注释里写明，写入后的 `Close` 仍必须显式检查。
+  - 删除 3 个死代码函数（两个平台的 `quickChatModifiers` 和 `formatMemoryContext`）；`staticcheck` 的 8 处写法建议照改；测试里永远不成立的 `runtime.GOOS == "windows"` 分支删除；Windows 下空实现的登录字段用带原因说明的 `//nolint:unused` 标注。
+  - macOS 和 `GOOS=windows` 交叉检查均为 0 个问题；Linux 因 Wails 依赖 cgo / GTK 无法在本机交叉检查，CI 也只跑 Windows。
+- [x] CI 测试 job：Frontend checks 在 `npm ci` 后运行 `npm run lint`；新增 Backend lint 步骤（`golangci/golangci-lint-action@v9`，版本 v2.14.0，参数 `./backend/... .`）；`pull_request.paths` 加上 `.golangci.yml`。
+- [x] `Taskfile.yml`：`check:frontend` 加入 `npm run lint`，新增 `check:lint`（说明里写明安装命令和固定版本），`check` 依次运行三个子任务。
+
+**验收：** ✅ 本地 `wails3 task check` 通过（ESLint 0 个问题；vitest 41 个文件、202 个用例；Go 31 个包；golangci-lint 0 个问题），流程与 CI 一致。PR 上的检查结果以 CI 为准。
+
+**后续项：**
+- [ ] 仓库里有不少存量 Go 文件没有经过 gofmt，这次没有启用 `gofmt` / `goimports` 格式化检查，以免产生大量与本次无关的改动。可以单独提一个只做格式化的 PR，再在 `.golangci.yml` 里开启 `formatters`。
+- [ ] `eslint-plugin-react-hooks` 7 新增的 React Compiler 相关规则暂未启用，可以在以后单独评估。
 
 ---
 

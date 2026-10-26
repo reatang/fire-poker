@@ -34,7 +34,6 @@ export function useAutoScroll(deps: unknown[], resetKey?: unknown) {
     return () => el.removeEventListener('scroll', handler)
   }, [])
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     if (resetKey === undefined) return
     autoScrollRef.current = true
@@ -44,14 +43,13 @@ export function useAutoScroll(deps: unknown[], resetKey?: unknown) {
     setIsAtBottom(true)
   }, [resetKey])
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     if (autoScrollRef.current) {
       const el = containerRef.current
       if (!el) return
       scrollElementToBottom(el)
     }
-  }, deps)
+  }, deps) // eslint-disable-line react-hooks/exhaustive-deps -- callers pass the list that should trigger a scroll.
 
   return { containerRef, isAtBottom, scrollToBottom, autoScrollRef }
 }

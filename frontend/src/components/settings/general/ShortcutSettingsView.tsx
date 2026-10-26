@@ -63,7 +63,8 @@ export function ShortcutSettingsView(props: {
     return () => {
       window.removeEventListener('keydown', listener, true)
     }
-  }, [recording])
+    // Subscribe only while recording; the capture listener must not be re-added on every render.
+  }, [recording]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <SettingsDirtyGuard dirty={props.dirty}>

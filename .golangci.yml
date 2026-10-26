@@ -1,0 +1,34 @@
+version: "2"
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+  settings:
+    errcheck:
+      # Best-effort cleanup is idiomatic: closing a read side, a response body or a pipe, or removing a
+      # temp file on an error path. A Close that flushes written data must still be checked explicitly
+      # (see pkg/mcp/importer.go and service/runtime/runtime_internal.go).
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (*os.Root).Close
+        - (*os.Root).Remove
+        - os.Remove
+        - os.RemoveAll
+        - (*compress/gzip.Reader).Close
+        - (*archive/zip.ReadCloser).Close
+        # Probe-only MCP tool sets are closed after listing their tools.
+        - (trpc.group/trpc-go/trpc-agent-go/tool.ToolSet).Close
+        # ConPTY process and thread handles are released once the process is started or finished.
+        - golang.org/x/sys/windows.CloseHandle
+  exclusions:
+    rules:
+      # Tests may ignore cleanup errors; a failing cleanup surfaces as a failing test anyway.
+      - path: _test\.go
+        linters:
+          - errcheck

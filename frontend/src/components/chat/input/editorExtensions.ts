@@ -1,5 +1,5 @@
 import { Extension, InputRule } from '@tiptap/core'
-import type { Editor, JSONContent } from '@tiptap/core'
+import type { Editor, JSONContent, Range } from '@tiptap/core'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import Suggestion from '@tiptap/suggestion'
 import { buildSlashSuggestion } from '../slashSuggestion'
@@ -10,9 +10,9 @@ export const SlashCommand = Extension.create({
   addProseMirrorPlugins() {
     return [
       Suggestion({
-        editor: this.editor as any,
+        editor: this.editor,
         ...buildSlashSuggestion(),
-        command: ({ editor, range, props }: { editor: any; range: { from: number; to: number }; props: { name: string } }) => {
+        command: ({ editor, range, props }: { editor: Editor; range: Range; props: { name: string } }) => {
           editor.chain().focus().deleteRange(range).insertContent(`/${props.name} `).run()
         },
       }),

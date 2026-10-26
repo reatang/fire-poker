@@ -1,10 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { SlidersHorizontal, X } from 'lucide-react'
 import { Agent } from '@bindings/github.com/reatang/fire-poker/backend/service/agent'
 import { useChatStore } from '@/store/chatStore'
 import { parseUnknownIError } from '@/lib/ierror'
+
+// promptLabel shows the stored prompt name, falling back to a localized default/custom label.
+function promptLabel(t: TFunction, config: { name: string; is_default: boolean }): string {
+  return config.name || t(config.is_default ? 'systemPrompt.defaultName' : 'systemPrompt.customName')
+}
 
 export function SystemPromptSettings({ sessionId, hasMessages = false }: { sessionId: number | null; hasMessages?: boolean }) {
   const { t } = useTranslation()
@@ -25,15 +31,13 @@ export function SystemPromptSettings({ sessionId, hasMessages = false }: { sessi
   const trigger = useRef<HTMLButtonElement>(null)
   const status = useChatStore(s => sessionId ? s.sessionStatuses[sessionId] : undefined)
   const generating = status === 'loading' || status === 'waiting-unread'
-  const promptLabel = (config: { name: string; is_default: boolean }) =>
-    config.name || t(config.is_default ? 'systemPrompt.defaultName' : 'systemPrompt.customName')
 
   useEffect(() => {
     let active = true
     setLocked(hasMessages)
     setCurrentName(t(sessionId ? 'systemPrompt.loadingName' : 'systemPrompt.defaultName'))
     if (sessionId) void Agent.GetSessionPrompt({ session_id: sessionId }).then(config => {
-      if (active && config) { setCurrentName(promptLabel(config)); setLocked(config.locked) }
+      if (active && config) { setCurrentName(promptLabel(t, config)); setLocked(config.locked) }
     }).catch(() => { if (active) setCurrentName(t('systemPrompt.loadFailed')) })
     return () => { active = false }
   }, [sessionId, hasMessages, t])
@@ -73,7 +77,7 @@ export function SystemPromptSettings({ sessionId, hasMessages = false }: { sessi
       const [config, library] = await Promise.all([Agent.GetSessionPrompt({ session_id: id }), Agent.ListSystemPrompts()])
       if (!config) throw new Error(t('systemPrompt.readFailed'))
       setSystem(config.system); setName(config.name); setSelected(''); setNames(library?.names ?? [])
-      setLocked(config.locked); setCurrentName(promptLabel(config))
+      setLocked(config.locked); setCurrentName(promptLabel(t, config))
       setNotice(t(config.is_default ? 'systemPrompt.usingDefault' : 'systemPrompt.loadedCurrent'))
     } finally { setLoading(false) }
   })
@@ -83,7 +87,7 @@ export function SystemPromptSettings({ sessionId, hasMessages = false }: { sessi
     const result = await Agent.UpdateSessionPrompt({ session_id: target, system, name, reset })
     if (!result) throw new Error(t('systemPrompt.saveFailed'))
     setSystem(result.system); setName(result.name)
-    setLocked(result.locked); setCurrentName(promptLabel(result))
+    setLocked(result.locked); setCurrentName(promptLabel(t, result))
     setNotice(t(reset ? 'systemPrompt.restored' : 'systemPrompt.applied'))
   })
 
