@@ -548,6 +548,17 @@ func TestSendMessagePersistsAttachmentsAndBuildsMultimodal(t *testing.T) {
 	if err != nil || len(got) != 1 || got[0].Kind != "image" {
 		t.Fatalf("attachments persisted incorrectly: %q -> %+v err=%v", msgs[0].Attachments, got, err)
 	}
+	// The stored path is a copy inside the session's working directory, so it survives the original.
+	wantDir := filepath.Join(manager.SessionWorkDir(session.ID), sessionAttachmentsDir)
+	if filepath.Dir(got[0].Path) != wantDir {
+		t.Fatalf("attachment should be copied into %s, got %s", wantDir, got[0].Path)
+	}
+	if err := os.Remove(imgPath); err != nil {
+		t.Fatalf("remove original: %v", err)
+	}
+	if data, err := os.ReadFile(got[0].Path); err != nil || len(data) != len(pngBytes) {
+		t.Fatalf("stored copy unreadable after original removed: %v", err)
+	}
 
 	// 2. Runner received a multimodal user message (one ContentPart of type image).
 	if len(r.lastMessage.ContentParts) != 1 ||

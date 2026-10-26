@@ -335,6 +335,7 @@ export default {
         data_root: { label: '数据目录', description: '所有配置、对话和扩展的根目录，备份或迁移时复制整个目录即可。' },
         config: { label: '配置文件', description: '语言、字号、快捷键、默认供应商和扩展列表等设置。' },
         database: { label: '数据库', description: '模型供应商、对话、消息、记忆和通知。删除会丢失全部对话。' },
+        sessions: { label: '对话工作目录', description: '每个对话一个子目录，存放发送过的附件和工具生成的文件。删除对话时一并删除。' },
         skills: { label: 'Skills', description: '用户创建或导入的 Skills。' },
         plugins: { label: '插件与工具', description: '已安装的 MCP、插件、CLI 工具及其数据。' },
         logs: { label: '日志', description: '按天保存的运行日志，保留 14 天，反馈问题时可附上。可随时删除。' },

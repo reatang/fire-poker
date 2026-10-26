@@ -50,12 +50,12 @@ func DefaultDefinitions(resolve func() Dependencies) []toolkit.Definition {
 		define(FileReadMeta(), false, func(s toolkit.Scope, d Dependencies) bool { return true }, func(s toolkit.Scope, d Dependencies) tool.Tool { return NewFileReadTool() }),
 		define(FileWriteMeta(), false, func(s toolkit.Scope, d Dependencies) bool { return true }, func(s toolkit.Scope, d Dependencies) tool.Tool { return NewFileWriteTool() }),
 		define(ShellMeta(), true, func(s toolkit.Scope, d Dependencies) bool { return platformShellName(runtime.GOOS) != "" }, func(s toolkit.Scope, d Dependencies) tool.Tool {
-			return NewShellTool(d.Emitter, s.SessionID, d.Terminal)
+			return NewShellTool(d.Emitter, s.SessionID, s.WorkDir, d.Terminal)
 		}),
 		define(BuildQuestionTool(), true, func(s toolkit.Scope, d Dependencies) bool { return true }, func(s toolkit.Scope, d Dependencies) tool.Tool { return NewQuestionTool() }),
 		define(WebFetchMeta(), true, func(s toolkit.Scope, d Dependencies) bool { return true }, func(s toolkit.Scope, d Dependencies) tool.Tool { return NewWebFetchTool() }),
 		define(BuildWebSearchTool(), true, func(s toolkit.Scope, d Dependencies) bool { return true }, func(s toolkit.Scope, d Dependencies) tool.Tool { return NewWebSearchTool() }),
-		define(CodeExecMeta(), false, func(s toolkit.Scope, d Dependencies) bool { return true }, func(s toolkit.Scope, d Dependencies) tool.Tool { return NewCodeExecTool() }),
+		define(CodeExecMeta(), false, func(s toolkit.Scope, d Dependencies) bool { return true }, func(s toolkit.Scope, d Dependencies) tool.Tool { return NewCodeExecTool(s.WorkDir) }),
 		define(BuildQRCodeTool(), false, func(s toolkit.Scope, d Dependencies) bool { return true }, func(s toolkit.Scope, d Dependencies) tool.Tool { return NewQRCodeTool() }),
 		define(BuildInteractiveTerminalTool(), false, func(s toolkit.Scope, d Dependencies) bool { return true }, func(s toolkit.Scope, d Dependencies) tool.Tool { return NewInteractiveTerminalTool() }),
 		define(BuildRequestAttentionTool(), false, func(s toolkit.Scope, d Dependencies) bool { return s.SessionKind == "task" && d.Attention != nil }, func(s toolkit.Scope, d Dependencies) tool.Tool {

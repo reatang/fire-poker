@@ -31,14 +31,14 @@ func platformShellDescription(goos string) string {
 	}
 }
 
-func NewWindowsShellTool(emitter ShellProgressEmitter, sessionID uint, runner ...ShellTerminalRunner) *function.FunctionTool[shellInput, shellOutput] {
-	return newPlatformShellTool("windows", emitter, sessionID, runner...)
+func NewWindowsShellTool(emitter ShellProgressEmitter, sessionID uint, workDir string, runner ...ShellTerminalRunner) *function.FunctionTool[shellInput, shellOutput] {
+	return newPlatformShellTool("windows", emitter, sessionID, workDir, runner...)
 }
 
-func NewMacOSShellTool(emitter ShellProgressEmitter, sessionID uint, runner ...ShellTerminalRunner) *function.FunctionTool[shellInput, shellOutput] {
-	return newPlatformShellTool("darwin", emitter, sessionID, runner...)
+func NewMacOSShellTool(emitter ShellProgressEmitter, sessionID uint, workDir string, runner ...ShellTerminalRunner) *function.FunctionTool[shellInput, shellOutput] {
+	return newPlatformShellTool("darwin", emitter, sessionID, workDir, runner...)
 }
 
-func NewLinuxShellTool(emitter ShellProgressEmitter, sessionID uint, runner ...ShellTerminalRunner) *function.FunctionTool[shellInput, shellOutput] {
-	return newPlatformShellTool("linux", emitter, sessionID, runner...)
+func NewLinuxShellTool(emitter ShellProgressEmitter, sessionID uint, workDir string, runner ...ShellTerminalRunner) *function.FunctionTool[shellInput, shellOutput] {
+	return newPlatformShellTool("linux", emitter, sessionID, workDir, runner...)
 }

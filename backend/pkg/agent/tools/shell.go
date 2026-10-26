@@ -29,7 +29,7 @@ type ShellProgressEmitter interface {
 
 type shellInput struct {
 	Command        string `json:"command" jsonschema:"description=Shell command to execute,required"`
-	WorkDir        string `json:"work_dir" jsonschema:"description=Working directory (default: user home)"`
+	WorkDir        string `json:"work_dir" jsonschema:"description=Working directory (default: this conversation's working directory, which also holds its attachments under attachments/)"`
 	TimeoutSeconds int    `json:"timeout_seconds" jsonschema:"description=Optional timeout in seconds; defaults to 600 and is capped at 3600"`
 	UsePty         bool   `json:"use_pty" jsonschema:"description=Run in a pseudo-terminal for interactive commands that draw terminal UI, print QR codes, or wait for browser/scan login"`
 	ShowTerminal   bool   `json:"show_terminal" jsonschema:"description=Show the terminal panel to the user. Defaults to false for normal commands and true when use_pty is true"`
@@ -285,21 +285,21 @@ func formatShellProgress(stdout, stderr string) string {
 	}
 }
 
-// NewShellTool builds the agent tool that executes shell commands.
-func NewShellTool(emitter ShellProgressEmitter, sessionID uint, terminalRunner ...ShellTerminalRunner) *function.FunctionTool[shellInput, shellOutput] {
+// NewShellTool builds the agent tool that executes shell commands; workDir is the default working directory.
+func NewShellTool(emitter ShellProgressEmitter, sessionID uint, workDir string, terminalRunner ...ShellTerminalRunner) *function.FunctionTool[shellInput, shellOutput] {
 	switch runtime.GOOS {
 	case "windows":
-		return NewWindowsShellTool(emitter, sessionID, terminalRunner...)
+		return NewWindowsShellTool(emitter, sessionID, workDir, terminalRunner...)
 	case "darwin":
-		return NewMacOSShellTool(emitter, sessionID, terminalRunner...)
+		return NewMacOSShellTool(emitter, sessionID, workDir, terminalRunner...)
 	case "linux":
-		return NewLinuxShellTool(emitter, sessionID, terminalRunner...)
+		return NewLinuxShellTool(emitter, sessionID, workDir, terminalRunner...)
 	default:
-		return newPlatformShellTool(runtime.GOOS, emitter, sessionID, terminalRunner...)
+		return newPlatformShellTool(runtime.GOOS, emitter, sessionID, workDir, terminalRunner...)
 	}
 }
 
-func newPlatformShellTool(goos string, emitter ShellProgressEmitter, sessionID uint, terminalRunner ...ShellTerminalRunner) *function.FunctionTool[shellInput, shellOutput] {
+func newPlatformShellTool(goos string, emitter ShellProgressEmitter, sessionID uint, workDir string, terminalRunner ...ShellTerminalRunner) *function.FunctionTool[shellInput, shellOutput] {
 	var runner ShellTerminalRunner
 	if len(terminalRunner) > 0 {
 		runner = terminalRunner[0]
@@ -308,6 +308,9 @@ func newPlatformShellTool(goos string, emitter ShellProgressEmitter, sessionID u
 		func(ctx context.Context, input shellInput) (shellOutput, error) {
 			if goos != runtime.GOOS || platformShellName(goos) == "" {
 				return shellOutput{}, fmt.Errorf("%s shell tool is disabled on %s", goos, runtime.GOOS)
+			}
+			if input.WorkDir == "" {
+				input.WorkDir = workDir
 			}
 			return shellFuncWithTerminal(ctx, emitter, sessionID, input, runner)
 		},

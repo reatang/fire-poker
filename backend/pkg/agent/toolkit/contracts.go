@@ -26,6 +26,8 @@ type Scope struct {
 	SessionID    uint
 	SessionKind  string
 	EnabledTools []string
+	// WorkDir is the conversation's working directory; empty falls back to each tool's own default.
+	WorkDir string
 }
 
 // Factory constructs a fresh tool; nil means unavailable in the requested scope.

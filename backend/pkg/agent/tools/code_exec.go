@@ -26,7 +26,8 @@ type codeExecOutput struct {
 	ExitCode int    `json:"exit_code"`
 }
 
-func codeExecFunc(ctx context.Context, input codeExecInput) (codeExecOutput, error) {
+// codeExecFunc runs the snippet from workDir when it exists, so relative paths land in the conversation's directory.
+func codeExecFunc(ctx context.Context, workDir string, input codeExecInput) (codeExecOutput, error) {
 	runners := map[string]struct {
 		cmd string
 		ext string
@@ -51,6 +52,9 @@ func codeExecFunc(ctx context.Context, input codeExecInput) (codeExecOutput, err
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, runner.cmd, tmpFile)
+	if isDir(workDir) {
+		cmd.Dir = workDir
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -72,9 +76,11 @@ func codeExecFunc(ctx context.Context, input codeExecInput) (codeExecOutput, err
 	}, nil
 }
 
-func NewCodeExecTool() *function.FunctionTool[codeExecInput, codeExecOutput] {
+func NewCodeExecTool(workDir string) *function.FunctionTool[codeExecInput, codeExecOutput] {
 	return function.NewFunctionTool(
-		codeExecFunc,
+		func(ctx context.Context, input codeExecInput) (codeExecOutput, error) {
+			return codeExecFunc(ctx, workDir, input)
+		},
 		function.WithName("code_exec"),
 		function.WithDescription("Execute code in Python, JavaScript, or Bash and return the output"),
 	)

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"testing"
 )
@@ -204,6 +205,16 @@ func CacheRoot(dataDir string) string {
 // LogsRoot returns the log directory: {dataDir}/logs.
 func LogsRoot(dataDir string) string {
 	return filepath.Join(dataDir, LogsSubdirName)
+}
+
+// SessionsRoot returns the per-conversation working directories: {dataDir}/sessions.
+func SessionsRoot(dataDir string) string {
+	return filepath.Join(dataDir, "sessions")
+}
+
+// SessionDir returns one conversation's working directory: {dataDir}/sessions/<id>. It is removed with the session.
+func SessionDir(dataDir string, sessionID uint) string {
+	return filepath.Join(SessionsRoot(dataDir), strconv.FormatUint(uint64(sessionID), 10))
 }
 
 // NodeRuntimeRoot returns the bundled Node runtime directory: {dataDir}/cache/runtime/node.

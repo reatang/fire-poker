@@ -134,7 +134,7 @@ func (m *Manager) SetToolConfirmDecider(decider ToolConfirmDecider) {
 
 // buildAgentTools delegates scoped construction to the implementation-independent manager.
 func (m *Manager) buildAgentTools(enabledUserTools []string, sessionKind string, sessionID uint) ([]toolpkg.Tool, error) {
-	return m.toolRegistry.BuildTools(toolkit.Scope{EnabledTools: enabledUserTools, SessionKind: sessionKind, SessionID: sessionID})
+	return m.toolRegistry.BuildTools(toolkit.Scope{EnabledTools: enabledUserTools, SessionKind: sessionKind, SessionID: sessionID, WorkDir: m.SessionWorkDir(sessionID)})
 }
 
 // inferOpenAIVariant maps the persisted provider type to the matching OpenAI variant.
@@ -179,7 +179,7 @@ func (m *Manager) GetOrCreateRunner(
 	if err != nil {
 		return nil, err
 	}
-	toolSets, err := m.toolRegistry.BuildToolSets(toolkit.Scope{EnabledTools: enabledUserTools, SessionKind: sessionKind, SessionID: sessionID})
+	toolSets, err := m.toolRegistry.BuildToolSets(toolkit.Scope{EnabledTools: enabledUserTools, SessionKind: sessionKind, SessionID: sessionID, WorkDir: m.SessionWorkDir(sessionID)})
 	if err != nil {
 		return nil, err
 	}

@@ -78,6 +78,7 @@ func buildDataDirectoryItems(dataDir string, goos string, homeDir string, tempDi
 		folder("data_root", dataDir),
 		file("config", filepath.Join(dataDir, dir.ConfigFileName)),
 		file("database", filepath.Join(dataDir, dir.DataBaseFileName)),
+		folder("sessions", dir.SessionsRoot(dataDir)),
 		folder("skills", dir.SkillsRoot(dataDir)),
 		folder("plugins", dir.ExtensionsRoot(dataDir)),
 		folder("logs", dir.LogsRoot(dataDir)),

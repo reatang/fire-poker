@@ -196,7 +196,7 @@ func TestBuildDataDirectoryItemsDarwin(t *testing.T) {
 		ids = append(ids, item.ID)
 		byID[item.ID] = item
 	}
-	wantIDs := []string{"data_root", "config", "database", "skills", "plugins", "logs", "cache", "webview_data", "webview_cache", "temp"}
+	wantIDs := []string{"data_root", "config", "database", "sessions", "skills", "plugins", "logs", "cache", "webview_data", "webview_cache", "temp"}
 	if len(ids) != len(wantIDs) {
 		t.Fatalf("ids = %v, want %v", ids, wantIDs)
 	}

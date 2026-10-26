@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"trpc.group/trpc-go/trpc-agent-go/tool"
 )
 
 type fakeShellProgressEmitter struct {
@@ -217,5 +219,27 @@ func TestResolveShellTimeoutUsesDefaultsAndCaps(t *testing.T) {
 	}
 	if got := resolveShellTimeout(int(maxShellTimeout.Seconds()) + 50); got != maxShellTimeout {
 		t.Fatalf("expected capped timeout, got %v", got)
+	}
+}
+
+// TestShellToolDefaultsToConversationWorkDir runs commands in the session directory unless the model picks one.
+func TestShellToolDefaultsToConversationWorkDir(t *testing.T) {
+	workDir := t.TempDir()
+	other := t.TempDir()
+	for _, tc := range []struct {
+		args string
+		want string
+	}{
+		{`{"command":"pwd"}`, workDir},
+		{fmt.Sprintf(`{"command":"pwd","work_dir":%q}`, other), other},
+	} {
+		runner := &fakeTerminalRunner{}
+		shell := NewShellTool(nil, 1, workDir, runner)
+		if _, err := tool.CallableTool(shell).Call(context.Background(), []byte(tc.args)); err != nil {
+			t.Fatalf("call %s: %v", tc.args, err)
+		}
+		if runner.createParams.Cwd != tc.want {
+			t.Fatalf("%s: cwd = %q, want %q", tc.args, runner.createParams.Cwd, tc.want)
+		}
 	}
 }

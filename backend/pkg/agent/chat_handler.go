@@ -193,7 +193,6 @@ type preparedTurn struct {
 	// regenerationQuestionID is the original question being retried, or 0 for a new question.
 	regenerationQuestionID uint
 	history                []model.Message
-	attachmentsJSON        string
 }
 
 // SendMessage starts a streaming run and consumes events asynchronously.
@@ -220,7 +219,7 @@ func (ch *ChatHandler) SendMessage(ctx context.Context, params SendMessageParams
 		return err
 	}
 	if turn.regenerationQuestionID == 0 {
-		if err := ch.persistUserMessage(params, turn.attachmentsJSON); err != nil {
+		if err := ch.persistUserMessage(&params); err != nil {
 			return err
 		}
 	}
@@ -262,10 +261,6 @@ func (ch *ChatHandler) prepareTurn(params *SendMessageParams) (preparedTurn, err
 	turn.history, err = ch.loadSessionHistoryBefore(params.SessionID, turn.regenerationQuestionID)
 	if err != nil {
 		return turn, err
-	}
-	turn.attachmentsJSON, err = MarshalAttachments(params.Attachments)
-	if err != nil {
-		return turn, fmt.Errorf("marshal attachments: %w", err)
 	}
 	return turn, nil
 }
@@ -315,9 +310,25 @@ func (ch *ChatHandler) resolveSessionPrompt(params *SendMessageParams) (*data_mo
 	return session, nil
 }
 
-// persistUserMessage stores the new question before the model sees it.
-func (ch *ChatHandler) persistUserMessage(params SendMessageParams, attachmentsJSON string) error {
-	_, err := ch.manager.Storage().CreateMessage(data_models.Message{
+// persistUserMessage moves the attachments into the session's working directory, then stores the
+// new question before the model sees it, so both the history and the model use the kept copies.
+func (ch *ChatHandler) persistUserMessage(params *SendMessageParams) error {
+	if len(params.Attachments) > 0 {
+		workDir := ch.manager.SessionWorkDir(params.SessionID)
+		if workDir == "" {
+			return fmt.Errorf("session %d has no working directory for attachments", params.SessionID)
+		}
+		stored, err := storeSessionAttachments(workDir, params.Attachments)
+		if err != nil {
+			return err
+		}
+		params.Attachments = stored
+	}
+	attachmentsJSON, err := MarshalAttachments(params.Attachments)
+	if err != nil {
+		return fmt.Errorf("marshal attachments: %w", err)
+	}
+	_, err = ch.manager.Storage().CreateMessage(data_models.Message{
 		SessionID:   params.SessionID,
 		Role:        "user",
 		ContentType: "text",

@@ -85,7 +85,7 @@ func TestForeignPlatformShellsCannotRegisterOrExecute(t *testing.T) {
 		}
 		t.Run(platform, func(t *testing.T) {
 			runner := &fakeTerminalRunner{}
-			foreign := newPlatformShellTool(platform, nil, 0, runner)
+			foreign := newPlatformShellTool(platform, nil, 0, "", runner)
 			_, err := tool.CallableTool(foreign).Call(context.Background(), []byte(`{"command":"echo forbidden"}`))
 			if err == nil || !strings.Contains(err.Error(), "disabled") {
 				t.Fatalf("foreign execution was not rejected: %v", err)

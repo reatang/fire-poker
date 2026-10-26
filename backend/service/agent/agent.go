@@ -245,6 +245,10 @@ func (a *Agent) DeleteSession(ctx context.Context, input agent_dto.DeleteSession
 	if err := a.manager.Storage().DeleteSession(input.SessionID); err != nil {
 		return nil, ierror.Error(ierror.ErrAgentDelete, err)
 	}
+	// The working directory lives and dies with the session; a leftover is only wasted disk.
+	if err := a.manager.RemoveSessionWorkDir(input.SessionID); err != nil {
+		log.Printf("remove session %d work dir: %v", input.SessionID, err)
+	}
 	return &agent_dto.DeleteSessionOutput{}, nil
 }
 

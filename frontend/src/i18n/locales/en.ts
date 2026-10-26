@@ -335,6 +335,7 @@ export default {
         data_root: { label: 'Data directory', description: 'Root of all settings, conversations and extensions. Copy the whole folder to back up or move.' },
         config: { label: 'Settings file', description: 'Language, font size, shortcuts, default provider, extension list and more.' },
         database: { label: 'Database', description: 'Providers, conversations, messages, memories and notifications. Deleting it loses all conversations.' },
+        sessions: { label: 'Conversation folders', description: 'One folder per conversation with its sent attachments and files made by tools. Removed when the conversation is deleted.' },
         skills: { label: 'Skills', description: 'Skills you created or imported.' },
         plugins: { label: 'Plugins & tools', description: 'Installed MCP servers, plugins, CLI tools and their data.' },
         logs: { label: 'Logs', description: 'Daily runtime logs kept for 14 days. Attach them when reporting issues. Safe to delete.' },
