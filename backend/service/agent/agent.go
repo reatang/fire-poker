@@ -271,7 +271,7 @@ func (a *Agent) GenerateTitle(ctx context.Context, input agent_dto.GenerateTitle
 		if len(content) > 200 {
 			content = content[:200]
 		}
-		preview.WriteString(fmt.Sprintf("%s: %s\n", msg.Role, content))
+		fmt.Fprintf(&preview, "%s: %s\n", msg.Role, content)
 	}
 
 	if preview.Len() == 0 {

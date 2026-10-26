@@ -135,7 +135,7 @@ export function createTurnSlice(set: ChatSet, get: ChatGet, buffer: StreamingBuf
             name: att.name,
             mime: att.mime,
           })),
-        } as any)
+        })
       } catch (err: unknown) {
         const parsed = parseIError(err)
         set((state) => {

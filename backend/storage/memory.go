@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"fmt"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -405,12 +404,4 @@ func clampScore(value int) int {
 func escapeLike(value string) string {
 	replacer := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 	return replacer.Replace(strings.TrimSpace(value))
-}
-
-func formatMemoryContext(memories []data_models.Memory) string {
-	lines := make([]string, 0, len(memories))
-	for _, memory := range memories {
-		lines = append(lines, fmt.Sprintf("[%s] %s: %s", memory.UpdatedAt.Format("2006-01-02"), memory.Summary, memory.Content))
-	}
-	return strings.Join(lines, "\n")
 }

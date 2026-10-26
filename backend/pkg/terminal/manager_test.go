@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -36,11 +35,9 @@ func newTerminalTestStorage(t *testing.T) *storage.Storage {
 }
 
 // writeTerminalTestScript writes an executable script used by PTY tests.
+// The file's !windows build constraint already keeps it off Windows.
 func writeTerminalTestScript(t *testing.T, body string) string {
 	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("PTY test uses POSIX shell script")
-	}
 	path := filepath.Join(t.TempDir(), "script.sh")
 	if err := os.WriteFile(path, []byte("#!/usr/bin/env bash\nset -e\n"+body+"\n"), 0o755); err != nil {
 		t.Fatalf("write script: %v", err)

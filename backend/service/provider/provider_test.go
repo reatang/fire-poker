@@ -50,8 +50,8 @@ func TestCreateProviderPersistsRecord(t *testing.T) {
 	if len(out.Providers) != 1 {
 		t.Fatalf("expected 1 provider, got %d", len(out.Providers))
 	}
-	if out.Providers[0].Provider.Name != "DeepSeek" {
-		t.Fatalf("expected name DeepSeek, got %q", out.Providers[0].Provider.Name)
+	if out.Providers[0].Name != "DeepSeek" {
+		t.Fatalf("expected name DeepSeek, got %q", out.Providers[0].Name)
 	}
 }
 
@@ -87,7 +87,7 @@ func TestDeleteProviderRemovesRecord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id := out.Providers[0].Provider.ID
+	id := out.Providers[0].ID
 
 	_, err = svc.DeleteProvider(ctx, provider_dto.DeleteProviderInput{ProviderId: int64(id)})
 	if err != nil {
@@ -123,7 +123,7 @@ func TestEditProviderUpdatesFields(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	id := out.Providers[0].Provider.ID
+	id := out.Providers[0].ID
 
 	_, err = svc.EditProvider(ctx, provider_dto.EditProviderInput{
 		ProviderId:   int64(id),

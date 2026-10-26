@@ -7,6 +7,7 @@ export type InteractiveTerminalState = {
 export function cleanTerminalOutput(output: string): string {
   const extracted = extractTerminalOutput(output, 0)
   return stripProgressEnvelope(extracted)
+    // eslint-disable-next-line no-control-regex -- ANSI escape sequences start with the ESC control character.
     .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
     .replace(/^\[(stdout|stderr)\]\n?/gim, '')
     .replace(/^Tool confirmation:.*\n*/gim, '')

@@ -204,7 +204,7 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
     const handleFocus = () => void load(false)
     window.addEventListener('focus', handleFocus)
     return () => window.removeEventListener('focus', handleFocus)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -242,7 +242,7 @@ export function ChatInput({ sessionId, variant = 'default' }: ChatInputProps) {
     setIsEmpty(true)
     setAttachments([])
     setDraftToolIds(null)
-  }, [targetSessionId, editor])
+  }, [targetSessionId, editor, setAttachments])
 
 
 

@@ -114,7 +114,7 @@ func buildToolConfirmDecisionPrompt(input ToolConfirmDecisionInput) string {
 	builder.WriteString(input.Arguments)
 	builder.WriteString("\n")
 	builder.WriteString("Static requires_confirm fallback: ")
-	builder.WriteString(fmt.Sprintf("%t", input.Meta.RequiresConfirm))
+	fmt.Fprintf(&builder, "%t", input.Meta.RequiresConfirm)
 	return builder.String()
 }
 

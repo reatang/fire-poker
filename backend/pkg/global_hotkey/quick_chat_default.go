@@ -4,11 +4,7 @@ package global_hotkey
 
 import "golang.design/x/hotkey"
 
-// quickChatModifiers returns the Windows control-based quick chat shortcut modifiers.
-func quickChatModifiers() []hotkey.Modifier {
-	return []hotkey.Modifier{hotkey.ModCtrl, hotkey.ModShift}
-}
-
+// quickChatModifierForToken maps a shortcut token to the Windows hotkey modifier.
 func quickChatModifierForToken(token string) (hotkey.Modifier, bool) {
 	switch token {
 	case "CmdOrCtrl", "Ctrl":

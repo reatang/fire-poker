@@ -169,7 +169,7 @@ export function createSessionSlice(set: ChatSet, get: ChatGet, buffer: Streaming
     },
 
     createConversation: async (params) => {
-      const result = await AgentBinding.CreateSession({ title: params?.title ?? '', tags: params?.tags ?? [] } as any)
+      const result = await AgentBinding.CreateSession({ title: params?.title ?? '', tags: params?.tags ?? [] })
       if (!result) return 0
 
       const tags = result.tags ?? params?.tags ?? []

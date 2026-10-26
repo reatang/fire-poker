@@ -188,5 +188,6 @@ export function InteractiveTerminalBlock({ output, active = false, onInput, onRe
 }
 
 function stripAnsiForAccessibleText(output: string): string {
+  // eslint-disable-next-line no-control-regex -- ANSI escape sequences start with the ESC control character.
   return output.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, '')
 }
