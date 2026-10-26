@@ -32,6 +32,15 @@ func (s *Storage) ListProviders() ([]data_models.Provider, error) {
 	return providers, nil
 }
 
+// GetProvider returns one provider row (soft-delete aware); a missing row yields gorm.ErrRecordNotFound.
+func (s *Storage) GetProvider(providerID uint) (*data_models.Provider, error) {
+	var provider data_models.Provider
+	if err := s.sqliteDB.First(&provider, providerID).Error; err != nil {
+		return nil, err
+	}
+	return &provider, nil
+}
+
 // ListModelsForProvider returns all model rows belonging to providerID.
 func (s *Storage) ListModelsForProvider(providerID uint) ([]data_models.Model, error) {
 	var models []data_models.Model

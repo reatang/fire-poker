@@ -1,4 +1,5 @@
 import { PanelLeftClose } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { isMac } from '@/lib/utils'
 
 interface SidebarHeaderProps {
@@ -6,6 +7,7 @@ interface SidebarHeaderProps {
 }
 
 export function SidebarHeader({ onCollapse }: SidebarHeaderProps) {
+  const { t } = useTranslation()
   return (
     <div className="desktop-sidebar-header flex h-12 items-center gap-2.5 px-4 select-none shrink-0">
       {!isMac && (
@@ -20,7 +22,7 @@ export function SidebarHeader({ onCollapse }: SidebarHeaderProps) {
       )}
       <button
         type="button"
-        aria-label="折叠侧边栏"
+        aria-label={t('sidebar.collapse')}
         onClick={onCollapse}
         className="ml-auto rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >

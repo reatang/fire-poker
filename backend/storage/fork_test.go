@@ -2,9 +2,28 @@ package storage
 
 import (
 	"fmt"
-	"github.com/reatang/fire-poker/backend/models/data_models"
 	"testing"
+
+	"github.com/reatang/fire-poker/backend/models/data_models"
+	"github.com/reatang/fire-poker/backend/pkg/i18n"
 )
+
+// TestForkTitleSuffixFollowsCurrentLocale localizes the label appended to a fork's title.
+func TestForkTitleSuffixFollowsCurrentLocale(t *testing.T) {
+	i18n.SetCurrentLocale(i18n.LocaleEnUS)
+	t.Cleanup(func() { i18n.SetCurrentLocale(i18n.DefaultLocale) })
+	s := newTestStorage(t)
+	source, _ := s.CreateSession(data_models.Session{Title: "original"})
+	message, _ := s.CreateMessage(data_models.Message{SessionID: source.ID, Role: "user", ContentType: "text", Content: "q"})
+
+	fork, err := s.ForkSession(source.ID, message.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fork.Title != "original · Fork" {
+		t.Fatalf("expected English fork suffix, got %q", fork.Title)
+	}
+}
 
 func TestForkCopiesCompletePrefixWithIndependentIDsAndPrompt(t *testing.T) {
 	s := newTestStorage(t)

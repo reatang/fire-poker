@@ -2,17 +2,14 @@ package plugin
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	agenttools "github.com/reatang/fire-poker/backend/pkg/agent/tools"
 	pkgcli "github.com/reatang/fire-poker/backend/pkg/cli"
 	"github.com/reatang/fire-poker/backend/pkg/configfile"
-	"github.com/reatang/fire-poker/backend/pkg/dir"
 	"github.com/reatang/fire-poker/backend/pkg/ierror"
 	pkgmcp "github.com/reatang/fire-poker/backend/pkg/mcp"
 	pkgProvider "github.com/reatang/fire-poker/backend/pkg/provider"
@@ -35,14 +32,21 @@ type Plugin struct {
 	loginFields             // platform-specific: loginSessions + startCliLogin (no-op stub on Windows)
 }
 
-// NewPlugin creates a plugin service bound to the current app data directory.
+// NewPlugin creates a plugin service without database access; manifest generation needs NewPluginWithStorage.
 func NewPlugin() *Plugin {
+	return NewPluginWithStorage(nil)
+}
+
+// NewPluginWithStorage creates a plugin service that reads the default chat model from the shared storage.
+func NewPluginWithStorage(stor *storage.Storage) *Plugin {
 	p := &Plugin{
-		mcpManager:              pkgmcp.NewManager(mustDataDir()),
-		probeCliHelp:            pkgcli.ProbeHelp,
-		generateManifest:        pkgcli.Generate,
-		resolveDefaultChatModel: loadDefaultChatModel,
-		loadPersistedRuntime:    pkgRuntimeState.LoadPersistedState,
+		mcpManager:       pkgmcp.NewManager(mustDataDir()),
+		probeCliHelp:     pkgcli.ProbeHelp,
+		generateManifest: pkgcli.Generate,
+		resolveDefaultChatModel: func() (defaultChatModel, error) {
+			return loadDefaultChatModel(stor)
+		},
+		loadPersistedRuntime: pkgRuntimeState.LoadPersistedState,
 	}
 	initLoginFields(p)
 	return p
@@ -72,17 +76,24 @@ type defaultChatModel struct {
 	ProviderType pkgProvider.Type
 }
 
+// errPluginStorageUnavailable reports a plugin service built without the shared database.
+var errPluginStorageUnavailable = errors.New("plugin service has no storage")
+
 // loadDefaultChatModel resolves the persisted default provider plus its selected default model.
-func loadDefaultChatModel() (defaultChatModel, error) {
-	stor, err := storage.NewStorage()
-	if err != nil {
-		return defaultChatModel{}, err
+// It reuses the application's storage; opening a fresh database per call leaked connections.
+func loadDefaultChatModel(stor *storage.Storage) (defaultChatModel, error) {
+	if stor == nil {
+		return defaultChatModel{}, errPluginStorageUnavailable
 	}
 	providers, err := stor.ListProviders()
 	if err != nil {
 		return defaultChatModel{}, err
 	}
-	defaultProviderID := readDefaultProviderIDLocal()
+	cfg, err := configfile.LoadCurrent()
+	if err != nil {
+		return defaultChatModel{}, err
+	}
+	defaultProviderID := cfg.DefaultProviderID
 	if defaultProviderID == 0 {
 		return defaultChatModel{}, os.ErrNotExist
 	}
@@ -114,22 +125,6 @@ func loadDefaultChatModel() (defaultChatModel, error) {
 		return defaultChatModel{}, os.ErrNotExist
 	}
 	return defaultChatModel{}, os.ErrNotExist
-}
-
-func readDefaultProviderIDLocal() uint {
-	dataDir, err := dir.GetDataDir()
-	if err != nil {
-		return 0
-	}
-	bytes, err := configfile.ReadFile(filepath.Join(dataDir, dir.ConfigFileName))
-	if err != nil {
-		return 0
-	}
-	var cfg data_models.Config
-	if err := json.Unmarshal(bytes, &cfg); err != nil {
-		return 0
-	}
-	return cfg.DefaultProviderID
 }
 
 // ListExtensions returns all imported plugin and MCP entries from persisted config.

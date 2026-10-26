@@ -8,7 +8,7 @@ import (
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	"github.com/reatang/fire-poker/backend/pkg/agent/tools"
-	"github.com/reatang/fire-poker/backend/pkg/id/event_id"
+	"github.com/reatang/fire-poker/backend/pkg/configfile"
 	"trpc.group/trpc-go/trpc-agent-go/model"
 	toolpkg "trpc.group/trpc-go/trpc-agent-go/tool"
 )
@@ -172,7 +172,7 @@ func (m *Manager) lookupToolMeta(toolName string) (tools.ToolMeta, bool) {
 	if meta, ok := m.ToolRegistry().Get(toolName); ok {
 		return meta, true
 	}
-	config, err := loadAgentConfig()
+	config, err := configfile.LoadCurrent()
 	if err != nil {
 		return tools.ToolMeta{}, false
 	}
@@ -206,33 +206,21 @@ func unknownToolMeta(toolName string) tools.ToolMeta {
 	}
 }
 
+// emitToolConfirmRequest asks the frontend to show an approval prompt for a pending tool call.
 func (m *Manager) emitToolConfirmRequest(sessionID uint, requestID, toolName, args, purpose string) {
-	app := m.App()
-	if app == nil {
-		return
-	}
-
-	app.Event.Emit(event_id.AgentStreamConfirmRequest, map[string]any{
-		"sessionId": sessionID,
-		"requestId": requestID,
-		"toolName":  toolName,
-		"args":      args,
-		"purpose":   purpose,
+	emitStreamConfirmRequest(m.App(), StreamConfirmRequestEvent{
+		SessionID: sessionID,
+		RequestID: requestID,
+		ToolName:  toolName,
+		Args:      args,
+		Purpose:   purpose,
 	})
 }
 
+// updateSessionStatus persists and broadcasts a session status change.
 func (m *Manager) updateSessionStatus(sessionID uint, status string) {
 	_ = m.Storage().UpdateSessionStatus(sessionID, status)
-
-	app := m.App()
-	if app == nil {
-		return
-	}
-
-	app.Event.Emit(event_id.AgentSessionStatus, map[string]any{
-		"sessionId": sessionID,
-		"status":    status,
-	})
+	emitSessionStatus(m.App(), SessionStatusEvent{SessionID: sessionID, Status: status})
 }
 
 func buildRejectedToolMessage(message string) string {

@@ -13,6 +13,13 @@ type Storage struct {
 	sqliteDB *gorm.DB
 }
 
+// sqliteConcurrencyParams lets streaming replies, terminal output and memory encoding write concurrently:
+//   - WAL keeps readers unblocked while one writer commits;
+//   - busy_timeout makes contended writers wait instead of failing with "database is locked";
+//   - txlock=immediate takes the write lock at BEGIN, because a deferred transaction that reads
+//     first and then writes (e.g. AppendTerminalOutput) fails at the upgrade without honoring busy_timeout.
+const sqliteConcurrencyParams = "_journal_mode=WAL&_busy_timeout=5000&_txlock=immediate"
+
 // NewStorage opens the application SQLite database and auto-migrates all models.
 func NewStorage() (*Storage, error) {
 	dataDir, err := dir.GetDataDir()
@@ -21,7 +28,7 @@ func NewStorage() (*Storage, error) {
 	}
 
 	dbPath := filepath.Join(dataDir, dir.DataBaseFileName)
-	gormDB, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	gormDB, err := gorm.Open(sqlite.Open(dbPath+"?"+sqliteConcurrencyParams), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}

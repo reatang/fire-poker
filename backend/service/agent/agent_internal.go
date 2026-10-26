@@ -2,14 +2,45 @@ package agent
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
+	pkgAgent "github.com/reatang/fire-poker/backend/pkg/agent"
+	"github.com/reatang/fire-poker/backend/pkg/ierror"
+	"github.com/reatang/fire-poker/backend/pkg/systemprompt"
 	"github.com/reatang/fire-poker/backend/service/agent/agent_dto"
+	"github.com/reatang/fire-poker/backend/storage"
 )
 
 const timeFormat = time.RFC3339
+
+// knownAgentErrors maps sentinel errors from lower layers to a specific localized message,
+// so the user sees the actual reason instead of a generic "operation failed".
+var knownAgentErrors = []struct {
+	target error
+	code   ierror.ErrorCode
+}{
+	{pkgAgent.ErrSessionBusy, ierror.ErrAgentSessionBusy},
+	{storage.ErrSystemPromptLocked, ierror.ErrAgentPromptLocked},
+	{storage.ErrSessionToolsLocked, ierror.ErrAgentToolsLocked},
+	{pkgAgent.ErrProviderRequired, ierror.ErrAgentProviderUnavail},
+	{pkgAgent.ErrProviderNotFound, ierror.ErrAgentProviderUnavail},
+	{pkgAgent.ErrProviderDisabled, ierror.ErrAgentProviderUnavail},
+	{systemprompt.ErrInvalidName, ierror.ErrAgentPromptInvalidName},
+	{systemprompt.ErrInvalidContent, ierror.ErrAgentPromptInvalid},
+}
+
+// agentError wraps err in an IError, preferring a specific code for known causes over fallback.
+func agentError(fallback ierror.ErrorCode, err error) error {
+	for _, known := range knownAgentErrors {
+		if errors.Is(err, known.target) {
+			return ierror.Error(known.code, err)
+		}
+	}
+	return ierror.Error(fallback, err)
+}
 
 func toSessionItem(s data_models.Session) agent_dto.SessionItem {
 	tags := sessionTags(s)

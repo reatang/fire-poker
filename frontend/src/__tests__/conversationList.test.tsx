@@ -5,7 +5,9 @@ import i18n from '@/i18n'
 import { useAppStore } from '@/store/appStore'
 import { useChatStore } from '@/store/chatStore'
 
-vi.mock('@wailsio/runtime', () => ({
+vi.mock('@wailsio/runtime', async (importOriginal) => ({
+  // Keep the real Create helpers: generated event bindings use them at import time.
+  ...(await importOriginal<typeof import('@wailsio/runtime')>()),
   Events: {
     On: vi.fn(),
   },

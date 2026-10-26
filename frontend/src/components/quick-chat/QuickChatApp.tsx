@@ -45,10 +45,8 @@ async function loadQuickChatRunConfig(sessionId: number) {
   const enabledUserTools = await useChatStore.getState().loadSessionTools(sessionId)
 
   return {
-    baseUrl: defaultProvider.provider.base_url,
-    apiKey: defaultProvider.provider.api_key,
+    providerId: defaultProvider.provider.id,
     modelName: defaultModel.model,
-    providerType: defaultProvider.provider.provider_type,
     enabledUserTools,
   }
 }
@@ -158,10 +156,8 @@ export function QuickChatApp() {
       await sendMessage({
         sessionId,
         content,
-        baseUrl: runConfig.baseUrl,
-        apiKey: runConfig.apiKey,
+        providerId: runConfig.providerId,
         modelName: runConfig.modelName,
-        providerType: runConfig.providerType,
         enabledUserTools: runConfig.enabledUserTools,
         attachments: [],
       })

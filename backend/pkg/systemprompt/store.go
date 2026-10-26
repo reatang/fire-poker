@@ -17,8 +17,11 @@ import (
 const DefaultDir = "./data/system-prompts"
 const MaxBytes = 128 << 10
 
-var ErrInvalidName = errors.New("名称须为 1–80 个字符，不能包含路径、特殊字符或 Windows 保留名称")
-var ErrInvalidContent = errors.New("提示词须为有效 UTF-8 文本，且不超过 128 KB")
+// ErrInvalidName rejects empty, overlong, path-like, special or Windows-reserved prompt names.
+var ErrInvalidName = errors.New("prompt name must be 1-80 characters without paths, special characters or Windows reserved names")
+
+// ErrInvalidContent rejects prompts that are not valid UTF-8 or exceed MaxBytes.
+var ErrInvalidContent = errors.New("prompt must be valid UTF-8 text no larger than 128 KB")
 
 type Prompt struct {
 	Name   string `json:"name"`

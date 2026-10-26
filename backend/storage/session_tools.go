@@ -10,7 +10,7 @@ import (
 )
 
 // ErrSessionToolsLocked indicates that the conversation's tool selection is immutable.
-var ErrSessionToolsLocked = errors.New("对话开始后不能修改工具选择，请新建对话")
+var ErrSessionToolsLocked = errors.New("tool selection is locked after the conversation started")
 
 // UpdateSessionTools saves an explicit selection only before any message exists, including archived messages.
 func (s *Storage) UpdateSessionTools(id uint, ids []string) error {

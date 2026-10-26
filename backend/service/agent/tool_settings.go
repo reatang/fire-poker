@@ -25,7 +25,7 @@ func (a *Agent) SaveSessionToolSettings(ctx context.Context, input agent_dto.Sav
 	if err := a.manager.Streams().WhileInactive(input.SessionID, func() error {
 		return a.manager.Storage().UpdateSessionTools(input.SessionID, input.ToolIDs)
 	}); err != nil {
-		return nil, ierror.Error(ierror.ErrAgentListSessions, err)
+		return nil, agentError(ierror.ErrAgentListSessions, err)
 	}
 	return a.GetSessionToolSettings(ctx, agent_dto.SessionToolsInput{SessionID: input.SessionID})
 }

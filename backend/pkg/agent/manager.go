@@ -3,18 +3,12 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
-	"strings"
 	"sync"
 
-	"github.com/reatang/fire-poker/backend/models/data_models"
 	"github.com/reatang/fire-poker/backend/pkg/agent/toolkit"
 	"github.com/reatang/fire-poker/backend/pkg/agent/tools"
-	"github.com/reatang/fire-poker/backend/pkg/configfile"
 	"github.com/reatang/fire-poker/backend/pkg/dir"
-	"github.com/reatang/fire-poker/backend/pkg/id/event_id"
 	"github.com/reatang/fire-poker/backend/pkg/id/prompt_id"
 	pkgMCP "github.com/reatang/fire-poker/backend/pkg/mcp"
 	"github.com/reatang/fire-poker/backend/pkg/prompt"
@@ -33,54 +27,62 @@ import (
 const defaultMainAgentPrompt = prompt.DefaultMainAgentPrompt
 const defaultGenChatTitlePrompt = `Generate a concise title under 20 characters for this conversation. Return only the title.`
 
+// ManagerDeps groups the optional application services tools depend on. They are fixed at
+// construction; a nil field leaves the corresponding tool unavailable.
+type ManagerDeps struct {
+	SkillProvider        tools.SkillProvider
+	AttentionRequester   tools.AttentionRequester
+	SkillCreator         tools.SkillCreator
+	CliInstaller         tools.CliInstaller
+	CliInstallProgress   tools.CliInstallProgressReporter
+	CliManifestGenerator tools.CliManifestGenerator
+	CliCommandRunner     tools.CliCommandRunner
+	TerminalRunner       *pkgterminal.Manager
+}
+
 // Manager manages runners, prompts, and tool registration for the main agent.
 type Manager struct {
-	mu                      sync.RWMutex
-	istorage                *storage.Storage
-	wailsApp                *application.App
-	toolRegistry            toolkit.Manager
-	toolDependenciesVersion uint64
-	streamManager           *StreamManager
-	runners                 map[string]runner.Runner
-	mcpManager              *pkgMCP.Manager
-	skillProvider           tools.SkillProvider
-	attention               tools.AttentionRequester
-	skillCreator            tools.SkillCreator
-	cliInstaller            tools.CliInstaller
-	cliInstallProgress      tools.CliInstallProgressReporter
-	cliManifestGenerator    tools.CliManifestGenerator
-	cliCommandRunner        tools.CliCommandRunner
-	terminalRunner          *pkgterminal.Manager
-	toolConfirmDecider      ToolConfirmDecider
-	memoryEncodeSem         chan struct{}
-	sessionService          *inmemory.SessionService
+	mu       sync.RWMutex
+	istorage *storage.Storage
+	// deps is immutable after construction, so tool factories read it without locking.
+	deps     ManagerDeps
+	wailsApp *application.App
+	// appVersion changes when the Wails app handle is replaced, invalidating runners whose tools captured it.
+	appVersion         uint64
+	toolRegistry       toolkit.Manager
+	streamManager      *StreamManager
+	runners            *runnerCache
+	mcpManager         *pkgMCP.Manager
+	toolConfirmDecider ToolConfirmDecider
+	memoryEncodeSem    chan struct{}
+	sessionService     *inmemory.SessionService
 }
 
 type toolResultEmitter struct {
 	app *application.App
 }
 
+// EmitToolResult forwards progress that long-running tools report before they return.
 func (e toolResultEmitter) EmitToolResult(sessionID uint, toolName, result string) {
-	if e.app == nil {
-		return
-	}
-	e.app.Event.Emit(event_id.AgentStreamToolResult, map[string]any{
-		"sessionId": sessionID,
-		"toolName":  toolName,
-		"result":    result,
-	})
+	emitStreamToolResult(e.app, StreamToolResultEvent{SessionID: sessionID, ToolName: toolName, Result: result})
 }
 
-// NewManager creates a new manager and registers the default main-agent prompt/tools.
+// NewManager creates a manager without optional tool services; tests and minimal setups use it.
 func NewManager(istorage *storage.Storage) *Manager {
+	return NewManagerWithDeps(istorage, ManagerDeps{})
+}
+
+// NewManagerWithDeps creates a manager wired to application services and registers the default prompts/tools.
+func NewManagerWithDeps(istorage *storage.Storage, deps ManagerDeps) *Manager {
 	prompt.Register(prompt_id.MainAgent, defaultMainAgentPrompt)
 	prompt.Register(prompt_id.GenChatTitle, defaultGenChatTitlePrompt)
 
 	m := &Manager{
 		istorage:           istorage,
+		deps:               deps,
 		toolRegistry:       toolkit.NewRegistry(),
 		streamManager:      NewStreamManager(),
-		runners:            make(map[string]runner.Runner),
+		runners:            newRunnerCache(maxCachedRunners),
 		mcpManager:         pkgMCP.NewManager(mustDataDir()),
 		toolConfirmDecider: defaultToolConfirmDecider,
 		memoryEncodeSem:    make(chan struct{}, 2),
@@ -97,8 +99,8 @@ func (m *Manager) SetApp(app *application.App) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.wailsApp = app
-	m.toolDependenciesVersion++
-	clear(m.runners)
+	m.appVersion++
+	m.runners.clear()
 }
 
 // ToolRegistry exposes the catalog and registration contract without its concrete implementation.
@@ -121,86 +123,6 @@ func (m *Manager) App() *application.App {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.wailsApp
-}
-
-// SetSkillProvider stores the skill provider used by the Skill meta-tool.
-// It must be called before any chat messages are processed.
-func (m *Manager) SetSkillProvider(provider tools.SkillProvider) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.skillProvider = provider
-	m.toolDependenciesVersion++
-	clear(m.runners)
-}
-
-// SkillProvider returns the currently configured skill provider, or nil.
-func (m *Manager) SkillProvider() tools.SkillProvider {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.skillProvider
-}
-
-// SetAttentionRequester stores the notification-backed attention requester.
-func (m *Manager) SetAttentionRequester(requester tools.AttentionRequester) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.attention = requester
-	m.toolDependenciesVersion++
-	clear(m.runners)
-}
-
-// SetSkillCreator stores the persistence layer used by ProposeSkill.
-func (m *Manager) SetSkillCreator(creator tools.SkillCreator) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.skillCreator = creator
-	m.toolDependenciesVersion++
-	clear(m.runners)
-}
-
-// SetCliInstaller stores the CLI installer used by the InstallCli tool.
-func (m *Manager) SetCliInstaller(i tools.CliInstaller) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.cliInstaller = i
-	m.toolDependenciesVersion++
-	clear(m.runners)
-}
-
-// SetCliInstallProgressReporter stores the progress reporter used by task install flows.
-func (m *Manager) SetCliInstallProgressReporter(r tools.CliInstallProgressReporter) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.cliInstallProgress = r
-	m.toolDependenciesVersion++
-	clear(m.runners)
-}
-
-// SetCliManifestGenerator stores the manifest generator used by the GenerateCliManifest tool.
-func (m *Manager) SetCliManifestGenerator(g tools.CliManifestGenerator) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.cliManifestGenerator = g
-	m.toolDependenciesVersion++
-	clear(m.runners)
-}
-
-// SetCliCommandRunner stores the arbitrary CLI command runner used by the RunCliCommand tool.
-func (m *Manager) SetCliCommandRunner(r tools.CliCommandRunner) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.cliCommandRunner = r
-	m.toolDependenciesVersion++
-	clear(m.runners)
-}
-
-// SetTerminalRunner supplies the shared terminal service used by shell tools.
-func (m *Manager) SetTerminalRunner(r *pkgterminal.Manager) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.terminalRunner = r
-	m.toolDependenciesVersion++
-	clear(m.runners)
 }
 
 // SetToolConfirmDecider overrides the runtime approval decider used before tool execution.
@@ -227,43 +149,29 @@ func inferOpenAIVariant(providerType pkgProvider.Type) openai.Variant {
 	}
 }
 
-// GetOrCreateRunner caches scoped tool assemblies by model, session, catalog and service versions.
+// GetOrCreateRunner caches session-scoped tool assemblies by model, credentials, catalog and service versions.
 func (m *Manager) GetOrCreateRunner(
-	baseURL string,
-	apiKey string,
-	modelName string,
-	providerType pkgProvider.Type,
+	cfg ModelConfig,
 	enabledUserTools []string,
 	sessionKind string,
 	sessionID uint,
 ) (runner.Runner, error) {
-	m.mu.RLock()
-	key := fmt.Sprintf("%s|session:%d|catalog:%d|services:%d", runnerCacheKey(baseURL, modelName, providerType, enabledUserTools, sessionKind), sessionID, m.toolRegistry.Version(), m.toolDependenciesVersion)
-	if existing, ok := m.runners[key]; ok {
-		m.mu.RUnlock()
+	key := m.runnerKey(cfg, enabledUserTools, sessionKind, sessionID)
+	if existing, ok := m.runners.get(key); ok {
 		return existing, nil
 	}
-	legacyKey := fmt.Sprintf("%s/%s", baseURL, modelName)
-	// Legacy entries are explicit injected runners; newly constructed runners use scoped keys only.
-	if len(enabledUserTools) == 0 {
-		if existing, ok := m.runners[legacyKey]; ok {
-			m.mu.RUnlock()
-			return existing, nil
-		}
-	}
-	m.mu.RUnlock()
 
 	instruction, err := prompt.Load(prompt_id.MainAgent)
 	if err != nil {
 		instruction = defaultMainAgentPrompt
 	}
 
-	variant := inferOpenAIVariant(providerType)
+	variant := inferOpenAIVariant(cfg.ProviderType)
 
 	mdl := openai.New(
-		modelName,
-		openai.WithBaseURL(baseURL),
-		openai.WithAPIKey(apiKey),
+		cfg.ModelName,
+		openai.WithBaseURL(cfg.BaseURL),
+		openai.WithAPIKey(cfg.APIKey),
 		openai.WithVariant(variant),
 	)
 
@@ -294,50 +202,21 @@ func (m *Manager) GetOrCreateRunner(
 		runner.WithSessionService(m.sessionService),
 	)
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if existing, ok := m.runners[key]; ok {
-		return existing, nil
-	}
-	m.runners[key] = created
-	return created, nil
+	return m.runners.add(key, created), nil
 }
 
-// runnerCacheKey normalizes model configuration and optional tool selection.
-func runnerCacheKey(baseURL string, modelName string, providerType pkgProvider.Type, enabledUserTools []string, sessionKind string) string {
+// runnerKey identifies a runner by provider, credentials, model, tool selection, session and dependency versions.
+// The credential fingerprint makes an edited API key or base URL miss the cache instead of reusing a stale client.
+func (m *Manager) runnerKey(cfg ModelConfig, enabledUserTools []string, sessionKind string, sessionID uint) string {
 	names := slices.Clone(enabledUserTools)
 	slices.Sort(names)
 	selection, _ := json.Marshal(names)
-	return fmt.Sprintf("%s|%s|%s|%s|%s", baseURL, modelName, providerType, selection, sessionKind)
-}
-
-func loadAgentConfig() (*data_models.Config, error) {
-	dataDir, err := dir.GetDataDir()
-	if err != nil {
-		return nil, err
-	}
-	bytes, err := configfile.ReadFile(filepath.Join(dataDir, dir.ConfigFileName))
-	if err != nil {
-		if os.IsNotExist(err) {
-			return &data_models.Config{
-				Extensions: []data_models.ExtensionItem{},
-				Memory:     data_models.MemoryConfig{Enabled: true},
-			}, nil
-		}
-		return nil, err
-	}
-
-	config := &data_models.Config{}
-	if err := json.Unmarshal(bytes, config); err != nil {
-		return nil, err
-	}
-	if !strings.Contains(string(bytes), `"memory"`) {
-		config.Memory.Enabled = true
-	}
-	if config.Extensions == nil {
-		config.Extensions = []data_models.ExtensionItem{}
-	}
-	return config, nil
+	m.mu.RLock()
+	servicesVersion := m.appVersion
+	m.mu.RUnlock()
+	return fmt.Sprintf("provider:%d|cred:%s|model:%s|tools:%s|kind:%s|session:%d|catalog:%d|services:%d",
+		cfg.ProviderID, cfg.credentialFingerprint(), cfg.ModelName, selection, sessionKind, sessionID,
+		m.toolRegistry.Version(), servicesVersion)
 }
 
 func mustDataDir() string {

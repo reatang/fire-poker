@@ -34,6 +34,25 @@ tasks:
     cmds:
       - uv run tools/release.py sync
 
+  check:
+    summary: Runs the same frontend and backend checks as CI (assumes frontend dependencies are installed)
+    cmds:
+      - task: check:frontend
+      - task: check:backend
+
+  check:frontend:
+    summary: Runs frontend tests and the production build, which also type-checks and produces frontend/dist
+    dir: frontend
+    cmds:
+      - npx vitest run
+      - npm run build
+
+  check:backend:
+    summary: Runs Go tests and vet for every package; main.go embeds frontend/dist, so run check:frontend first
+    cmds:
+      - go test ./...
+      - go vet ./...
+
   run:
     summary: Runs the application
     cmds:

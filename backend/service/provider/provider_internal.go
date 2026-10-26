@@ -1,9 +1,6 @@
 package provider
 
 import (
-	"encoding/json"
-	"path/filepath"
-
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	"github.com/reatang/fire-poker/backend/models/view_model"
 	"github.com/reatang/fire-poker/backend/pkg/configfile"
@@ -58,16 +55,8 @@ func providerIconPath(t pkgProvider.Type) string {
 
 // readDefaultProviderID reads DefaultProviderID from the config file, returning 0 on any error.
 func readDefaultProviderID() uint {
-	dataDir, err := dir.GetDataDir()
+	cfg, err := configfile.LoadCurrent()
 	if err != nil {
-		return 0
-	}
-	bytes, err := configfile.ReadFile(filepath.Join(dataDir, dir.ConfigFileName))
-	if err != nil {
-		return 0
-	}
-	var cfg data_models.Config
-	if err := json.Unmarshal(bytes, &cfg); err != nil {
 		return 0
 	}
 	return cfg.DefaultProviderID

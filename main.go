@@ -88,7 +88,7 @@ func main() {
 	}
 
 	// Create the plugin and agent services — plugin must come first so its CLI bridge can be wired in.
-	pluginService := pluginSvc.NewPlugin()
+	pluginService := pluginSvc.NewPluginWithStorage(istorage)
 	memoryService := memorySvc.NewMemory(istorage)
 	notificationService := notificationSvc.NewNotification(istorage)
 	terminalManager := pkgterminal.NewManager(istorage, nil)
@@ -106,7 +106,7 @@ func main() {
 		}
 	}, quickChatShortcut)
 	settingsService := settings.NewSettings(settings.Dependencies{QuickChatShortcuts: quickChatService, SessionToolDefaults: istorage})
-	agentService := agentSvc.NewAgent(istorage, agentSvc.Dependencies{
+	agentService := agentSvc.NewAgentWithDeps(istorage, agentSvc.Dependencies{
 		SkillProvider:        skillsManager,
 		AttentionRequester:   notificationService,
 		SkillCreator:         skillsManager,

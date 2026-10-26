@@ -115,15 +115,14 @@ func TestSendMessageContinuesAfterRequestContextIsCanceled(t *testing.T) {
 	}
 
 	r := newDelayedRunner()
-	injectSessionRunner(t, manager, session.ID, "https://api.example.com", "gpt-test", "openai_compatibility", r)
+	providerID := injectSessionRunner(t, manager, session.ID, "https://api.example.com", "gpt-test", "openai_compatibility", r)
 
 	requestCtx, cancelRequest := context.WithCancel(context.Background())
 	if err := handler.SendMessage(requestCtx, SendMessageParams{
-		SessionID:    session.ID,
-		Content:      "hello",
-		BaseURL:      "https://api.example.com",
-		ModelName:    "gpt-test",
-		ProviderType: "openai_compatibility",
+		SessionID:  session.ID,
+		Content:    "hello",
+		ProviderID: providerID,
+		ModelName:  "gpt-test",
 	}); err != nil {
 		t.Fatalf("send message: %v", err)
 	}
@@ -198,14 +197,13 @@ func TestSendMessageReplaysStoredSessionHistoryWhenSwitchingRunner(t *testing.T)
 	}
 
 	r := newDelayedRunner()
-	injectSessionRunner(t, manager, session.ID, "https://api.example.com", "new-model", "openai_compatibility", r)
+	providerID := injectSessionRunner(t, manager, session.ID, "https://api.example.com", "new-model", "openai_compatibility", r)
 
 	if err := handler.SendMessage(context.Background(), SendMessageParams{
-		SessionID:    session.ID,
-		Content:      "new user question",
-		BaseURL:      "https://api.example.com",
-		ModelName:    "new-model",
-		ProviderType: "openai_compatibility",
+		SessionID:  session.ID,
+		Content:    "new user question",
+		ProviderID: providerID,
+		ModelName:  "new-model",
 	}); err != nil {
 		t.Fatalf("send message: %v", err)
 	}
@@ -516,7 +514,7 @@ func TestSendMessagePersistsAttachmentsAndBuildsMultimodal(t *testing.T) {
 	r := newDelayedRunner()
 	// Inject runner directly — bypasses the real GetOrCreateRunner.
 	// Key format matches manager.GetOrCreateRunner's cache key.
-	injectSessionRunner(t, manager, session.ID, "https://api.example.com", "m", "openai_compatibility", r)
+	providerID := injectSessionRunner(t, manager, session.ID, "https://api.example.com", "m", "openai_compatibility", r)
 
 	tmpDir := t.TempDir()
 	imgPath := filepath.Join(tmpDir, "tiny.png")
@@ -526,12 +524,10 @@ func TestSendMessagePersistsAttachmentsAndBuildsMultimodal(t *testing.T) {
 	}
 
 	err = handler.SendMessage(context.Background(), SendMessageParams{
-		SessionID:    session.ID,
-		Content:      "describe",
-		BaseURL:      "https://api.example.com",
-		ApiKey:       "x",
-		ModelName:    "m",
-		ProviderType: "openai_compatibility",
+		SessionID:  session.ID,
+		Content:    "describe",
+		ProviderID: providerID,
+		ModelName:  "m",
 		Attachments: []Attachment{
 			NormalizeAttachment(Attachment{Path: imgPath}),
 		},

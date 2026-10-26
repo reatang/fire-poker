@@ -2,13 +2,15 @@ import { vi } from 'vitest'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useChatStore } from '../store/chatStore'
 import { Agent as AgentBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/agent'
-import { Type as ProviderType } from '@bindings/github.com/reatang/fire-poker/backend/pkg/provider/models'
+import { Provider as ProviderBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/provider'
 
 const eventHandlers = new Map<string, (event: { data: unknown }) => void>()
 const rafCallbacks = new Map<number, FrameRequestCallback>()
 let rafId = 0
 
-vi.mock('@wailsio/runtime', () => ({
+vi.mock('@wailsio/runtime', async (importOriginal) => ({
+  // Keep the real Create helpers: generated event bindings use them at import time.
+  ...(await importOriginal<typeof import('@wailsio/runtime')>()),
   Events: {
     On: vi.fn((name: string, handler: (event: { data: unknown }) => void) => {
       eventHandlers.set(name, handler)
@@ -33,6 +35,12 @@ vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/agent', () => (
     StopGeneration: vi.fn().mockResolvedValue(undefined),
     RespondToConfirm: vi.fn().mockResolvedValue(undefined),
     GenerateTitle: vi.fn().mockResolvedValue({ title: 'New Chat' }),
+  },
+}))
+
+vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/provider', () => ({
+  Provider: {
+    ProviderAndModelList: vi.fn().mockResolvedValue({ provider_models: [] }),
   },
 }))
 
@@ -107,10 +115,8 @@ describe('chatStore', () => {
     await useChatStore.getState().sendMessage({
       sessionId: id,
       content: 'hello world',
-      baseUrl: 'https://example.com',
-      apiKey: 'test-key',
+      providerId: 7,
       modelName: 'gpt-test',
-      providerType: ProviderType.OpenAiCompatibility,
       enabledUserTools: [],
       attachments: [],
     })
@@ -120,10 +126,8 @@ describe('chatStore', () => {
     expect(draftTitle).toBe('Suggested Title')
     expect(generateTitleMock).toHaveBeenLastCalledWith({
       session_id: id,
-      base_url: 'https://example.com',
-      api_key: 'test-key',
+      provider_id: 7,
       model_name: 'gpt-test',
-      provider_type: ProviderType.OpenAiCompatibility,
     })
     expect(useChatStore.getState().conversations.find(c => c.id === id)?.title).toBe('New Chat')
   })
@@ -175,10 +179,8 @@ describe('chatStore', () => {
     await useChatStore.getState().sendMessage({
       sessionId: id,
       content: 'hello world',
-      baseUrl: 'https://example.com',
-      apiKey: 'test-key',
+      providerId: 7,
       modelName: 'gpt-test',
-      providerType: ProviderType.OpenAiCompatibility,
       enabledUserTools: [],
       attachments: [],
     })
@@ -213,10 +215,8 @@ describe('chatStore', () => {
     await useChatStore.getState().sendMessage({
       sessionId: id,
       content: 'hello world',
-      baseUrl: 'https://example.com',
-      apiKey: 'test-key',
+      providerId: 7,
       modelName: 'gpt-test',
-      providerType: ProviderType.OpenAiCompatibility,
       enabledUserTools: [],
       attachments: [],
     })
@@ -244,10 +244,8 @@ describe('chatStore', () => {
     expect(generateTitleMock).toHaveBeenCalledTimes(1)
     expect(generateTitleMock).toHaveBeenCalledWith({
       session_id: id,
-      base_url: 'https://example.com',
-      api_key: 'test-key',
+      provider_id: 7,
       model_name: 'gpt-test',
-      provider_type: ProviderType.OpenAiCompatibility,
     })
   })
 
@@ -525,10 +523,8 @@ describe('chatStore', () => {
       ),
       pendingTitleGenerations: {
         [id]: {
-          baseUrl: 'https://example.com',
-          apiKey: 'test-key',
+          providerId: 7,
           modelName: 'gpt-test',
-          providerType: ProviderType.OpenAiCompatibility,
         },
       },
     })
@@ -678,10 +674,8 @@ describe('sendMessage error handling', () => {
     await useChatStore.getState().sendMessage({
       sessionId: 1,
       content: 'hello',
-      baseUrl: 'http://localhost',
-      apiKey: 'test',
+      providerId: 7,
       modelName: 'gpt-4',
-      providerType: ProviderType.OpenAiCompatibility,
       enabledUserTools: [],
       attachments: [],
     })
@@ -704,7 +698,7 @@ describe('regeneration state', () => {
     {id:101, sessionId:1, parentId:null, role:'user' as const, contentType:'text' as const, content:'question', modelName:'', agentName:'', tokensIn:0, tokensOut:0, extra:'', createdAt:''},
     {id:102, sessionId:1, parentId:null, role:'assistant' as const, contentType:'text' as const, content:'old answer', modelName:'m', agentName:'', tokensIn:0, tokensOut:0, extra:'', createdAt:''},
   ]
-  const params = {sessionId:1, regenerateMessageId:102, content:'question', baseUrl:'http://x', apiKey:'', modelName:'m', providerType:ProviderType.OpenAiCompatibility, enabledUserTools:[], attachments:[]}
+  const params = {sessionId:1, regenerateMessageId:102, content:'question', providerId:7, modelName:'m', enabledUserTools:[], attachments:[]}
   it('keeps one question while retrying and forwards the response ID', async () => {
     vi.mocked(AgentBinding.SendMessage).mockResolvedValueOnce({})
     useChatStore.setState({messages:{1:original},sessionStatuses:{1:'idle'}})
@@ -722,6 +716,27 @@ describe('regeneration state', () => {
     expect(useChatStore.getState().messages[1]).toEqual(original)
     expect(useChatStore.getState().sessionStatuses[1]).toBe('idle')
     expect(useChatStore.getState().streamingMessages[1]).toBeUndefined()
+  })
+  it('retries with the provider that produced the answer when several offer the same model', async () => {
+    const providerModel = (id: number) => ({
+      provider: { id, icon: '', provider_type: 'openai_compatibility', provider_name: `P${id}`, base_url: `http://p${id}`, enabled: true, api_key: '', is_default: false },
+      models: [{ id: id * 10, provider_id: id, model: 'm', owned_by: '', object: '', enable: true, alias: null, is_custom: false, is_default: false }],
+    })
+    vi.mocked(ProviderBinding.ProviderAndModelList).mockResolvedValueOnce({ provider_models: [providerModel(3), providerModel(7)] } as never)
+    vi.mocked(AgentBinding.SendMessage).mockResolvedValueOnce({})
+    useChatStore.setState({
+      messages: { 1: original },
+      sessionStatuses: { 1: 'idle' },
+      sessionRunConfigs: { 1: { providerId: 7, modelName: 'm' } },
+    })
+
+    await useChatStore.getState().regenerateMessage(1, 102)
+
+    expect(AgentBinding.SendMessage).toHaveBeenLastCalledWith(expect.objectContaining({
+      regenerate_message_id: 102,
+      provider_id: 7,
+      model_name: 'm',
+    }))
   })
 })
 

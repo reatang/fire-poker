@@ -3,7 +3,6 @@ import { PanelLeftOpen, Pencil, Check, X, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Provider as ProviderBinding } from '@bindings/github.com/reatang/fire-poker/backend/service/provider'
 import type { ProviderWrapper } from '@bindings/github.com/reatang/fire-poker/backend/service/provider/provider_dto/models'
-import { Type as ProviderType } from '@bindings/github.com/reatang/fire-poker/backend/pkg/provider/models'
 import { useChatStore } from '@/store/chatStore'
 import { useSettingsStore } from '@/store/settingsStore'
 import { cn } from '@/lib/utils'
@@ -141,10 +140,8 @@ export function ChatHeader({
     if (!selectedModel) return null
 
     return {
-      baseUrl: selectedProvider.base_url,
-      apiKey: selectedProvider.api_key,
+      providerId: selectedProvider.id,
       modelName: selectedModel.model,
-      providerType: selectedProvider.provider_type as ProviderType,
     }
   }
 
@@ -184,7 +181,7 @@ export function ChatHeader({
       {sidebarCollapsed && (
         <button
           type="button"
-          aria-label="展开侧边栏"
+          aria-label={t('sidebar.expand')}
           onClick={onExpandSidebar}
           className="shrink-0 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
         >

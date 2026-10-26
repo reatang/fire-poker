@@ -6,9 +6,31 @@
 // @ts-ignore: Unused imports
 import { Create as $Create } from "@wailsio/runtime";
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
+import * as agent$0 from "../../../../reatang/fire-poker/backend/pkg/agent/models.js";
+
 function configure() {
     Object.freeze(Object.assign($Create.Events, {
+        "agent:session:spawned": $$createType0,
+        "agent:session:status": $$createType1,
+        "agent:stream:chunk": $$createType2,
+        "agent:stream:confirm_request": $$createType3,
+        "agent:stream:done": $$createType4,
+        "agent:stream:error": $$createType5,
+        "agent:stream:tool_call": $$createType6,
+        "agent:stream:tool_result": $$createType7,
     }));
 }
+
+// Private type creation functions
+const $$createType0 = agent$0.SessionSpawnedEvent.createFrom;
+const $$createType1 = agent$0.SessionStatusEvent.createFrom;
+const $$createType2 = agent$0.StreamChunkEvent.createFrom;
+const $$createType3 = agent$0.StreamConfirmRequestEvent.createFrom;
+const $$createType4 = agent$0.StreamDoneEvent.createFrom;
+const $$createType5 = agent$0.StreamErrorEvent.createFrom;
+const $$createType6 = agent$0.StreamToolCallEvent.createFrom;
+const $$createType7 = agent$0.StreamToolResultEvent.createFrom;
 
 configure();

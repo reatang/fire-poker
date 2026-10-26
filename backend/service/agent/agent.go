@@ -4,21 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	pkgAgent "github.com/reatang/fire-poker/backend/pkg/agent"
-	"github.com/reatang/fire-poker/backend/pkg/agent/tools"
-	"github.com/reatang/fire-poker/backend/pkg/id/event_id"
 	"github.com/reatang/fire-poker/backend/pkg/id/prompt_id"
 	"github.com/reatang/fire-poker/backend/pkg/ierror"
 	"github.com/reatang/fire-poker/backend/pkg/prompt"
-	pkgterminal "github.com/reatang/fire-poker/backend/pkg/terminal"
 	"github.com/reatang/fire-poker/backend/service/agent/agent_dto"
 	"github.com/reatang/fire-poker/backend/storage"
-	"trpc.group/trpc-go/trpc-agent-go/event"
-	"trpc.group/trpc-go/trpc-agent-go/model"
 )
 
 // Agent exposes backend agent operations to the frontend.
@@ -27,47 +24,16 @@ type Agent struct {
 }
 
 // Dependencies groups optional agent integrations that are only needed at app startup.
-type Dependencies struct {
-	SkillProvider        tools.SkillProvider
-	AttentionRequester   tools.AttentionRequester
-	SkillCreator         tools.SkillCreator
-	CliInstaller         tools.CliInstaller
-	CliInstallProgress   tools.CliInstallProgressReporter
-	CliManifestGenerator tools.CliManifestGenerator
-	CliCommandRunner     tools.CliCommandRunner
-	TerminalRunner       *pkgterminal.Manager
+type Dependencies = pkgAgent.ManagerDeps
+
+// NewAgent creates an agent service without optional tool services.
+func NewAgent(istorage *storage.Storage) *Agent {
+	return NewAgentWithDeps(istorage, Dependencies{})
 }
 
-// NewAgent creates an agent service backed by application storage.
-func NewAgent(istorage *storage.Storage, deps ...Dependencies) *Agent {
-	svc := &Agent{manager: pkgAgent.NewManager(istorage)}
-	if len(deps) > 0 {
-		if deps[0].SkillProvider != nil {
-			svc.manager.SetSkillProvider(deps[0].SkillProvider)
-		}
-		if deps[0].AttentionRequester != nil {
-			svc.manager.SetAttentionRequester(deps[0].AttentionRequester)
-		}
-		if deps[0].SkillCreator != nil {
-			svc.manager.SetSkillCreator(deps[0].SkillCreator)
-		}
-		if deps[0].CliInstaller != nil {
-			svc.manager.SetCliInstaller(deps[0].CliInstaller)
-		}
-		if deps[0].CliInstallProgress != nil {
-			svc.manager.SetCliInstallProgressReporter(deps[0].CliInstallProgress)
-		}
-		if deps[0].CliManifestGenerator != nil {
-			svc.manager.SetCliManifestGenerator(deps[0].CliManifestGenerator)
-		}
-		if deps[0].CliCommandRunner != nil {
-			svc.manager.SetCliCommandRunner(deps[0].CliCommandRunner)
-		}
-		if deps[0].TerminalRunner != nil {
-			svc.manager.SetTerminalRunner(deps[0].TerminalRunner)
-		}
-	}
-	return svc
+// NewAgentWithDeps creates an agent service wired to the application's tool services.
+func NewAgentWithDeps(istorage *storage.Storage, deps Dependencies) *Agent {
+	return &Agent{manager: pkgAgent.NewManagerWithDeps(istorage, deps)}
 }
 
 func (a *Agent) SendMessage(ctx context.Context, input agent_dto.SendMessageInput) (*agent_dto.SendMessageOutput, error) {
@@ -83,15 +49,13 @@ func (a *Agent) SendMessage(ctx context.Context, input agent_dto.SendMessageInpu
 		Content:             input.Content,
 		SystemPrompt:        input.SystemPrompt,
 		PrimedSkill:         input.SkillName,
-		BaseURL:             input.BaseURL,
-		ApiKey:              input.ApiKey,
+		ProviderID:          input.ProviderID,
 		ModelName:           input.ModelName,
-		ProviderType:        input.ProviderType,
 		EnabledUserTools:    input.EnabledUserTools,
 		Attachments:         atts,
 	})
 	if err != nil {
-		return nil, ierror.Error(ierror.ErrAgentSendMessage, err)
+		return nil, agentError(ierror.ErrAgentSendMessage, err)
 	}
 	return &agent_dto.SendMessageOutput{}, nil
 }
@@ -206,15 +170,13 @@ func (a *Agent) SpawnTaskSession(ctx context.Context, input agent_dto.SpawnTaskS
 		return nil, ierror.Error(ierror.ErrAgentCreateSession, err)
 	}
 
-	if app := a.manager.App(); app != nil {
-		app.Event.Emit(event_id.AgentSessionSpawned, map[string]any{
-			"sessionId":   session.ID,
-			"title":       session.Title,
-			"kind":        session.Kind,
-			"tags":        []string{"task"},
-			"userMessage": input.UserMessage,
-		})
-	}
+	pkgAgent.EmitSessionSpawned(a.manager.App(), pkgAgent.SessionSpawnedEvent{
+		SessionID:   session.ID,
+		Title:       session.Title,
+		Kind:        session.Kind,
+		Tags:        []string{"task"},
+		UserMessage: input.UserMessage,
+	})
 
 	go func() {
 		handler := a.manager.NewChatHandler()
@@ -223,10 +185,8 @@ func (a *Agent) SpawnTaskSession(ctx context.Context, input agent_dto.SpawnTaskS
 			Content:      input.UserMessage,
 			SystemPrompt: input.SystemPrompt,
 			PrimedSkill:  input.SkillName,
-			BaseURL:      input.BaseURL,
-			ApiKey:       input.ApiKey,
+			ProviderID:   input.ProviderID,
 			ModelName:    input.ModelName,
-			ProviderType: input.ProviderType,
 		})
 	}()
 
@@ -295,9 +255,8 @@ func (a *Agent) ToggleStarSession(ctx context.Context, input agent_dto.ToggleSta
 	return &agent_dto.ToggleStarSessionOutput{}, nil
 }
 
+// GenerateTitle summarizes the opening turns into a session title with a single tool-free completion.
 func (a *Agent) GenerateTitle(ctx context.Context, input agent_dto.GenerateTitleInput) (*agent_dto.GenerateTitleOutput, error) {
-	fmt.Println("Generating title for session:", input.SessionID)
-
 	msgs, err := a.manager.Storage().ListMessagesForSession(input.SessionID, 0, 4)
 	if err != nil || len(msgs) == 0 {
 		return &agent_dto.GenerateTitleOutput{Title: "New Chat"}, nil
@@ -319,18 +278,24 @@ func (a *Agent) GenerateTitle(ctx context.Context, input agent_dto.GenerateTitle
 		return &agent_dto.GenerateTitleOutput{Title: "New Chat"}, nil
 	}
 
-	r, err := a.manager.GetOrCreateRunner(input.BaseURL, input.ApiKey, input.ModelName, input.ProviderType, nil, "user", input.SessionID)
+	cfg, err := a.manager.ResolveModelConfig(input.ProviderID, input.ModelName)
 	if err != nil {
+		log.Printf("generate title for session %d: %v", input.SessionID, err)
 		return &agent_dto.GenerateTitleOutput{Title: "New Chat"}, nil
 	}
 
-	titlePrompt := buildTitlePrompt(preview.String())
-	events, err := r.Run(ctx, "local", fmt.Sprintf("title-%d", input.SessionID), model.NewUserMessage(titlePrompt))
+	// A oneshot call binds no tools and creates no SDK session, so nothing lingers after the title returns.
+	resp, err := pkgAgent.OneshotComplete(ctx, cfg.ApplyTo(pkgAgent.OneshotRequest{
+		User:      buildTitlePrompt(preview.String()),
+		MaxTokens: titleMaxTokens,
+		Timeout:   titleTimeout,
+	}))
 	if err != nil {
+		log.Printf("generate title for session %d: %v", input.SessionID, err)
 		return &agent_dto.GenerateTitleOutput{Title: "New Chat"}, nil
 	}
 
-	result := collectTitleFromEvents(events)
+	result := strings.TrimSpace(resp.Text)
 	if result == "" {
 		result = "New Chat"
 	}
@@ -339,31 +304,10 @@ func (a *Agent) GenerateTitle(ctx context.Context, input agent_dto.GenerateTitle
 	return &agent_dto.GenerateTitleOutput{Title: result}, nil
 }
 
-func collectTitleFromEvents(events <-chan *event.Event) string {
-	var streamedTitle strings.Builder
-	var finalTitle string
-
-	for evt := range events {
-		if evt == nil || evt.Error != nil {
-			continue
-		}
-		for _, choice := range evt.Choices {
-			if choice.Delta.Content != "" {
-				streamedTitle.WriteString(choice.Delta.Content)
-			}
-			if finalTitle == "" && choice.Message.Content != "" {
-				finalTitle = choice.Message.Content
-			}
-		}
-	}
-
-	result := strings.TrimSpace(streamedTitle.String())
-	if result != "" {
-		return result
-	}
-
-	return strings.TrimSpace(finalTitle)
-}
+const (
+	titleMaxTokens = 64
+	titleTimeout   = 30 * time.Second
+)
 
 func buildTitlePrompt(preview string) string {
 	titleInstruction, err := prompt.Load(prompt_id.GenChatTitle)

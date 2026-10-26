@@ -2,15 +2,20 @@ package plugin
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
 	agenttools "github.com/reatang/fire-poker/backend/pkg/agent/tools"
+	"github.com/reatang/fire-poker/backend/pkg/configfile"
 	"github.com/reatang/fire-poker/backend/service/plugin/plugin_dto"
 	"github.com/reatang/fire-poker/backend/service/settings"
 	"github.com/reatang/fire-poker/backend/service/settings/settings_dto"
+	"github.com/reatang/fire-poker/backend/storage"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 // TestDelayedPluginSavePreservesAppliedTools reproduces a plugin probe committing a stale config snapshot.
@@ -207,5 +212,50 @@ func TestListAvailableToolsOnlyShowsPracticalBuiltinsForOrdinaryUsers(t *testing
 		if got[hidden] {
 			t.Fatalf("expected developer builtin %q to stay hidden, got %v", hidden, got)
 		}
+	}
+}
+
+// TestLoadDefaultChatModelUsesSharedStorage resolves the default model through the injected database.
+func TestLoadDefaultChatModelUsesSharedStorage(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("FIRE_POKER_DATA_DIR", dataDir)
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stor, err := storage.NewStorageFromDB(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := stor.CreateProvider(data_models.Provider{ProviderName: "p", ProviderType: "deepseek", BaseUrl: "https://api.example.com", ApiKey: "k", Enable: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	models := []data_models.Model{{ProviderId: provider.ID, Model: "other"}, {ProviderId: provider.ID, Model: "deepseek-chat"}}
+	if err := stor.CreateModels(&models); err != nil {
+		t.Fatal(err)
+	}
+	if err := stor.UpsertDefaultModel(provider.ID, models[1].ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := configfile.SaveFields(dataDir, &data_models.Config{DefaultProviderID: provider.ID}, "default_provider_id"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := NewPluginWithStorage(stor).resolveDefaultChatModel()
+	if err != nil {
+		t.Fatalf("resolve default chat model: %v", err)
+	}
+	want := defaultChatModel{BaseURL: "https://api.example.com", APIKey: "k", ModelName: "deepseek-chat", ProviderType: "deepseek"}
+	if got != want {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+}
+
+// TestLoadDefaultChatModelWithoutStorage fails cleanly instead of opening a private database.
+func TestLoadDefaultChatModelWithoutStorage(t *testing.T) {
+	t.Setenv("FIRE_POKER_DATA_DIR", t.TempDir())
+	if _, err := NewPlugin().resolveDefaultChatModel(); !errors.Is(err, errPluginStorageUnavailable) {
+		t.Fatalf("expected errPluginStorageUnavailable, got %v", err)
 	}
 }

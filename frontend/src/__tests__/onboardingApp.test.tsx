@@ -57,7 +57,8 @@ describe('Onboarding app', () => {
 
     render(<App />)
 
-    expect(screen.getByText('先连接第一个模型供应商，再开始你的第一段对话')).toBeInTheDocument()
+    // The onboarding entry is code-split, so its first paint is asynchronous.
+    expect(await screen.findByText('先连接第一个模型供应商，再开始你的第一段对话')).toBeInTheDocument()
     expect(screen.getByText('欢迎')).toBeInTheDocument()
     expect(screen.getByText('选择供应商')).toBeInTheDocument()
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/reatang/fire-poker/backend/pkg/agent/toolkit"
+	"github.com/reatang/fire-poker/backend/pkg/agent/tools"
 	"trpc.group/trpc-go/trpc-agent-go/tool"
 	"trpc.group/trpc-go/trpc-agent-go/tool/function"
 )
@@ -35,14 +36,17 @@ func TestRegisteredToolNeedsNoManagerDispatch(t *testing.T) {
 	t.Fatal("registered custom tool was not constructed")
 }
 
+// unreachableModelConfig builds runners without ever contacting a model.
+var unreachableModelConfig = ModelConfig{ProviderID: 1, BaseURL: "http://127.0.0.1:1", APIKey: "unused", ModelName: "test"}
+
 // TestRunnerCacheSeparatesSessionScopedTools protects the per-session factory lifecycle.
 func TestRunnerCacheSeparatesSessionScopedTools(t *testing.T) {
 	m := NewManager(nil)
-	first, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", nil, "task", 1)
+	first, err := m.GetOrCreateRunner(unreachableModelConfig, nil, "task", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", nil, "task", 2)
+	second, err := m.GetOrCreateRunner(unreachableModelConfig, nil, "task", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,43 +55,70 @@ func TestRunnerCacheSeparatesSessionScopedTools(t *testing.T) {
 	}
 }
 
-// TestRunnerCacheTracksRegistrationAndServiceChanges ensures cached runners see new capabilities.
-func TestRunnerCacheTracksRegistrationAndServiceChanges(t *testing.T) {
+// TestRunnerCacheTracksRegistrationAndAppChanges ensures cached runners see new capabilities
+// and a replaced Wails app handle; other services are fixed at construction.
+func TestRunnerCacheTracksRegistrationAndAppChanges(t *testing.T) {
 	m := NewManager(nil)
-	first, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", nil, "user", 1)
+	first, err := m.GetOrCreateRunner(unreachableModelConfig, nil, "user", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	same, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", nil, "user", 1)
+	same, err := m.GetOrCreateRunner(unreachableModelConfig, nil, "user", 1)
 	if err != nil || same != first {
 		t.Fatal("unchanged scope should reuse its runner")
 	}
 	registerTestTool(t, m.ToolRegistry(), toolkit.Meta{Name: "new_builtin", Category: toolkit.CategoryBuiltin})
-	second, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", nil, "user", 1)
+	second, err := m.GetOrCreateRunner(unreachableModelConfig, nil, "user", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if second == first {
 		t.Fatal("catalog registration did not invalidate runner assembly")
 	}
-	m.SetCliInstallProgressReporter(&fakeCliInstallProgressReporter{})
-	third, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", nil, "user", 1)
+	m.SetApp(nil)
+	third, err := m.GetOrCreateRunner(unreachableModelConfig, nil, "user", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if third == second {
-		t.Fatal("service wiring did not invalidate runner assembly")
+		t.Fatal("replacing the app handle did not invalidate runner assembly")
+	}
+}
+
+// TestNewManagerWithDepsEnablesDependentTools proves constructor-injected services reach tool construction.
+func TestNewManagerWithDepsEnablesDependentTools(t *testing.T) {
+	without, err := NewManager(nil).buildAgentTools(nil, "task", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	with, err := NewManagerWithDeps(nil, ManagerDeps{CliInstallProgress: &fakeCliInstallProgressReporter{}}).buildAgentTools(nil, "task", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	has := func(built []tool.Tool) bool {
+		for _, current := range built {
+			if current.Declaration().Name == tools.ReportCliInstallProgressToolName {
+				return true
+			}
+		}
+		return false
+	}
+	if has(without) {
+		t.Fatal("progress tool must stay unavailable without its reporter")
+	}
+	if !has(with) {
+		t.Fatal("injected reporter did not enable the progress tool")
 	}
 }
 
 // TestRunnerCacheDistinguishesUnsetAndEmptySelection prevents an all-off selection reusing default tools.
 func TestRunnerCacheDistinguishesUnsetAndEmptySelection(t *testing.T) {
 	m := NewManager(nil)
-	first, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", nil, "user", 1)
+	first, err := m.GetOrCreateRunner(unreachableModelConfig, nil, "user", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := m.GetOrCreateRunner("http://127.0.0.1:1", "unused", "test", "", []string{}, "user", 1)
+	second, err := m.GetOrCreateRunner(unreachableModelConfig, []string{}, "user", 1)
 	if err != nil {
 		t.Fatal(err)
 	}

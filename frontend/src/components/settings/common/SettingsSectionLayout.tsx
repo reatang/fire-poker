@@ -1,9 +1,11 @@
 import { ArrowLeft } from 'lucide-react'
 import { type ReactNode, useContext } from 'react'
+import { useTranslation } from 'react-i18next'
 import { SettingsMenuContext } from '@/components/settings/SettingsShell'
 import { cn, isMac } from '@/lib/utils'
 
 function H5NavBar(props: { onClick: () => void }) {
+  const { t } = useTranslation()
   return (
     <div className={cn(
       'flex shrink-0 items-end border-b border-border/50',
@@ -15,7 +17,7 @@ function H5NavBar(props: { onClick: () => void }) {
         className="flex items-center gap-1.5 rounded-lg text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft size={16} />
-        <span className="font-medium">返回</span>
+        <span className="font-medium">{t('common.back')}</span>
       </button>
     </div>
   )

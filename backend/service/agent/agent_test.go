@@ -2,6 +2,11 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +14,8 @@ import (
 	"time"
 
 	"github.com/reatang/fire-poker/backend/models/data_models"
+	pkgAgent "github.com/reatang/fire-poker/backend/pkg/agent"
+	"github.com/reatang/fire-poker/backend/pkg/i18n"
 	"github.com/reatang/fire-poker/backend/pkg/id/prompt_id"
 	"github.com/reatang/fire-poker/backend/pkg/ierror"
 	"github.com/reatang/fire-poker/backend/pkg/prompt"
@@ -16,8 +23,6 @@ import (
 	"github.com/reatang/fire-poker/backend/storage"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"trpc.group/trpc-go/trpc-agent-go/event"
-	"trpc.group/trpc-go/trpc-agent-go/model"
 )
 
 func newTestStorage(t *testing.T) *storage.Storage {
@@ -206,45 +211,81 @@ func TestBuildTitlePromptUsesRegisteredPromptID(t *testing.T) {
 	}
 }
 
-func TestCollectTitleFromEventsPrefersStreamedDeltaWithoutDuplicatingFinalMessage(t *testing.T) {
-	events := make(chan *event.Event, 2)
-	events <- &event.Event{
-		Response: &model.Response{
-			Choices: []model.Choice{{
-				Delta: model.Message{Content: "简单"},
-			}},
-		},
-	}
-	events <- &event.Event{
-		Response: &model.Response{
-			Choices: []model.Choice{{
-				Delta:   model.Message{Content: "问候"},
-				Message: model.Message{Content: "简单问候"},
-			}},
-			Done: true,
-		},
-	}
-	close(events)
+// TestGenerateTitleUsesStoredCredentialsWithoutTools proves titles come from one tool-free call
+// authenticated with the provider's stored key rather than anything supplied by the caller.
+func TestGenerateTitleUsesStoredCredentialsWithoutTools(t *testing.T) {
+	var gotAuth string
+	var gotBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		if err := json.NewDecoder(r.Body).Decode(&gotBody); err != nil {
+			t.Errorf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"  秋日散文  "}}]}`))
+	}))
+	defer server.Close()
 
-	if got := collectTitleFromEvents(events); got != "简单问候" {
-		t.Fatalf("expected deduplicated streamed title, got %q", got)
+	stor := newTestStorage(t)
+	svc := NewAgent(stor)
+	provider, err := stor.CreateProvider(data_models.Provider{
+		ProviderName: "test", ProviderType: "openai_compatibility", BaseUrl: server.URL, ApiKey: "stored-key", Enable: true,
+	})
+	if err != nil {
+		t.Fatalf("create provider: %v", err)
+	}
+	session, err := stor.CreateSession(data_models.Session{Title: "New Chat"})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	if _, err := stor.CreateMessage(data_models.Message{SessionID: session.ID, Role: "user", ContentType: "text", Content: "写一篇秋天的散文"}); err != nil {
+		t.Fatalf("create message: %v", err)
+	}
+
+	out, err := svc.GenerateTitle(context.Background(), agent_dto.GenerateTitleInput{
+		SessionID: session.ID, ProviderID: provider.ID, ModelName: "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("generate title: %v", err)
+	}
+	if out.Title != "秋日散文" {
+		t.Fatalf("expected trimmed model title, got %q", out.Title)
+	}
+	if gotAuth != "Bearer stored-key" {
+		t.Fatalf("expected stored API key, got %q", gotAuth)
+	}
+	if _, ok := gotBody["tools"]; ok {
+		t.Fatalf("title generation must not bind tools, got %v", gotBody["tools"])
+	}
+	saved, err := stor.GetSession(session.ID)
+	if err != nil {
+		t.Fatalf("get session: %v", err)
+	}
+	if saved.Title != "秋日散文" {
+		t.Fatalf("expected persisted title, got %q", saved.Title)
 	}
 }
 
-func TestCollectTitleFromEventsFallsBackToFinalMessageWhenNoDeltaArrives(t *testing.T) {
-	events := make(chan *event.Event, 1)
-	events <- &event.Event{
-		Response: &model.Response{
-			Choices: []model.Choice{{
-				Message: model.Message{Content: "Hello"},
-			}},
-			Done: true,
-		},
+// TestGenerateTitleFallsBackForUnknownProvider keeps the previous non-fatal behavior on bad input.
+func TestGenerateTitleFallsBackForUnknownProvider(t *testing.T) {
+	stor := newTestStorage(t)
+	svc := NewAgent(stor)
+	session, err := stor.CreateSession(data_models.Session{Title: "New Chat"})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
 	}
-	close(events)
+	if _, err := stor.CreateMessage(data_models.Message{SessionID: session.ID, Role: "user", ContentType: "text", Content: "hello"}); err != nil {
+		t.Fatalf("create message: %v", err)
+	}
 
-	if got := collectTitleFromEvents(events); got != "Hello" {
-		t.Fatalf("expected final message fallback title, got %q", got)
+	out, err := svc.GenerateTitle(context.Background(), agent_dto.GenerateTitleInput{
+		SessionID: session.ID, ProviderID: 404, ModelName: "gpt-test",
+	})
+	if err != nil {
+		t.Fatalf("generate title: %v", err)
+	}
+	if out.Title != "New Chat" {
+		t.Fatalf("expected fallback title, got %q", out.Title)
 	}
 }
 
@@ -308,5 +349,92 @@ func TestConvertAttachmentsNormalizesAndPasses(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Name != "hello.go" || got[0].Kind != "file" {
 		t.Fatalf("normalize failed: %+v", got)
+	}
+}
+
+// iErrorMsg extracts the localized message the frontend displays.
+func iErrorMsg(t *testing.T, err error) string {
+	t.Helper()
+	var iErr *ierror.IError
+	if !errors.As(err, &iErr) {
+		t.Fatalf("expected *ierror.IError, got %T: %v", err, err)
+	}
+	return iErr.Msg
+}
+
+// TestAgentErrorPrefersSpecificMessages proves known causes surface their own localized message.
+func TestAgentErrorPrefersSpecificMessages(t *testing.T) {
+	cases := []struct {
+		err  error
+		want ierror.ErrorCode
+	}{
+		{fmt.Errorf("resolve model: %w", pkgAgent.ErrProviderDisabled), ierror.ErrAgentProviderUnavail},
+		{pkgAgent.ErrSessionBusy, ierror.ErrAgentSessionBusy},
+		{storage.ErrSystemPromptLocked, ierror.ErrAgentPromptLocked},
+		{storage.ErrSessionToolsLocked, ierror.ErrAgentToolsLocked},
+		{errors.New("disk full"), ierror.ErrAgentSendMessage},
+	}
+	for _, tc := range cases {
+		if got := iErrorMsg(t, agentError(ierror.ErrAgentSendMessage, tc.err)); got != tc.want.Msg() {
+			t.Errorf("%v: msg = %q, want %q", tc.err, got, tc.want.Msg())
+		}
+	}
+}
+
+// TestSendMessageReportsUnavailableProvider replaces the generic "send failed" with the actual cause.
+func TestSendMessageReportsUnavailableProvider(t *testing.T) {
+	t.Setenv("FIRE_POKER_DATA_DIR", t.TempDir())
+	svc := NewAgent(newTestStorage(t))
+	created, err := svc.CreateSession(context.Background(), agent_dto.CreateSessionInput{})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	_, err = svc.SendMessage(context.Background(), agent_dto.SendMessageInput{SessionID: created.SessionID, Content: "hi", ProviderID: 404, ModelName: "m"})
+	if got := iErrorMsg(t, err); got != ierror.ErrAgentProviderUnavail.Msg() {
+		t.Fatalf("msg = %q, want provider-unavailable message", got)
+	}
+}
+
+// TestPromptAndForkErrorsAreLocalized covers service methods that previously returned bare Chinese errors.
+func TestPromptAndForkErrorsAreLocalized(t *testing.T) {
+	t.Setenv("FIRE_POKER_DATA_DIR", t.TempDir())
+	svc := NewAgent(newTestStorage(t))
+	created, err := svc.CreateSession(context.Background(), agent_dto.CreateSessionInput{})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	_, err = svc.UpdateSessionPrompt(context.Background(), agent_dto.UpdateSessionPromptInput{SessionID: created.SessionID, System: "  "})
+	if got := iErrorMsg(t, err); got != ierror.ErrAgentPromptEmpty.Msg() {
+		t.Fatalf("empty prompt msg = %q", got)
+	}
+	_, err = svc.UpdateSessionPrompt(context.Background(), agent_dto.UpdateSessionPromptInput{SessionID: created.SessionID, System: "role", Name: strings.Repeat("名", maxPromptNameRunes+1)})
+	if got := iErrorMsg(t, err); got != ierror.ErrAgentPromptNameTooLong.Msg() {
+		t.Fatalf("long name msg = %q", got)
+	}
+	_, err = svc.ForkSession(context.Background(), agent_dto.ForkSessionInput{SessionID: created.SessionID})
+	if got := iErrorMsg(t, err); got != ierror.ErrAgentForkTarget.Msg() {
+		t.Fatalf("fork target msg = %q", got)
+	}
+}
+
+// TestGetSessionPromptNamesFollowLocale keeps fallback prompt labels in the active language.
+func TestGetSessionPromptNamesFollowLocale(t *testing.T) {
+	t.Setenv("FIRE_POKER_DATA_DIR", t.TempDir())
+	i18n.SetCurrentLocale(i18n.LocaleEnUS)
+	t.Cleanup(func() { i18n.SetCurrentLocale(i18n.DefaultLocale) })
+	svc := NewAgent(newTestStorage(t))
+	created, err := svc.CreateSession(context.Background(), agent_dto.CreateSessionInput{})
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	out, err := svc.GetSessionPrompt(context.Background(), agent_dto.SessionPromptInput{SessionID: created.SessionID})
+	if err != nil {
+		t.Fatalf("get prompt: %v", err)
+	}
+	if out.Name != "Default system prompt" {
+		t.Fatalf("expected English default label, got %q", out.Name)
 	}
 }
