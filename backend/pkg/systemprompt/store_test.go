@@ -120,3 +120,41 @@ func TestConcurrentReadersAndWriters(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestDelete(t *testing.T) {
+	store, err := New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Save("remove", "instructions"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Delete("remove"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Get("remove"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("deleted prompt is still readable: %v", err)
+	}
+	names, err := store.List()
+	if err != nil || len(names) != 0 {
+		t.Fatalf("deleted prompt still listed: %v, %v", names, err)
+	}
+	if err := store.Delete("remove"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("missing prompt: %v", err)
+	}
+	for _, name := range []string{"", "../outside", `..\outside`, "CON"} {
+		if err := store.Delete(name); !errors.Is(err, ErrInvalidName) {
+			t.Fatalf("Delete(%q): %v", name, err)
+		}
+	}
+	// A directory with a prompt-like name must never be removed.
+	if err := os.Mkdir(filepath.Join(store.dir, "directory.txt"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Delete("directory"); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("directory accepted as prompt: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(store.dir, "directory.txt")); err != nil {
+		t.Fatalf("directory was removed: %v", err)
+	}
+}

@@ -1,6 +1,6 @@
 import type { FontSize, Language } from '@/types'
 
-export type SettingsPrimaryTab = 'general' | 'providers' | 'plugins' | 'skills' | 'memory' | 'data' | 'about'
+export type SettingsPrimaryTab = 'general' | 'providers' | 'prompts' | 'plugins' | 'skills' | 'memory' | 'data' | 'about'
 export type GeneralSettingsTab = 'display' | 'locale' | 'shortcuts'
 
 export const SYSTEM_TOOLS_ID = 'system-tools'

@@ -1,4 +1,4 @@
-import { Blocks, Brain, HardDrive, Info, Package2, SlidersHorizontal, Sparkles } from 'lucide-react'
+import { Blocks, Brain, FileText, HardDrive, Info, Package2, SlidersHorizontal, Sparkles } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import type { SettingsPrimaryTab } from '@/types/settings'
@@ -13,6 +13,7 @@ export function SettingsPrimaryMenu(props: {
   const menuItems: { key: SettingsPrimaryTab; label: string; icon: typeof SlidersHorizontal }[] = [
     { key: 'general', label: t('settingsPage.primary.general'), icon: SlidersHorizontal },
     { key: 'providers', label: t('settingsPage.primary.providers'), icon: Package2 },
+    { key: 'prompts', label: t('settingsPage.primary.prompts'), icon: FileText },
     { key: 'plugins', label: t('settingsPage.primary.plugins'), icon: Blocks },
     { key: 'skills', label: t('settingsPage.primary.skills'), icon: Sparkles },
     { key: 'memory', label: t('settingsPage.primary.memory'), icon: Brain },

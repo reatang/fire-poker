@@ -148,3 +148,25 @@ func (s *Store) Save(name, system string) (Prompt, error) {
 	}
 	return Prompt{Name: name, System: system}, nil
 }
+
+// Delete removes a library entry without changing prompts stored in sessions.
+func (s *Store) Delete(name string) error {
+	if err := validateName(name); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	root, err := os.OpenRoot(s.dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	info, err := root.Lstat(name + ".txt")
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return os.ErrNotExist
+	}
+	return root.Remove(name + ".txt")
+}

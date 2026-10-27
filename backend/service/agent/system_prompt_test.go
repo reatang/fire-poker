@@ -78,3 +78,41 @@ func TestStartedSessionCannotChangeOrResetPrompt(t *testing.T) {
 		t.Fatalf("locked prompt changed: %+v %v", got, err)
 	}
 }
+
+func TestDeleteLibraryPromptPreservesSession(t *testing.T) {
+	t.Setenv("FIRE_POKER_DATA_DIR", t.TempDir())
+	stor := newTestStorage(t)
+	a := NewAgent(stor)
+	ctx := context.Background()
+	input := agent_dto.PromptLibraryInput{Name: "assistant", System: "Original instructions"}
+	if _, err := a.SaveSystemPrompt(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+	s, err := a.CreateSession(ctx, agent_dto.CreateSessionInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.UpdateSessionPrompt(ctx, agent_dto.UpdateSessionPromptInput{SessionID: s.SessionID, Name: input.Name, System: input.System}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stor.CreateMessage(data_models.Message{SessionID: s.SessionID, Role: "user", ContentType: "text", Content: "Hello"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.DeleteSystemPrompt(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+	list, err := a.ListSystemPrompts(ctx)
+	if err != nil || len(list.Names) != 0 {
+		t.Fatalf("deleted prompt still listed: %+v, %v", list, err)
+	}
+	got, err := a.GetSessionPrompt(ctx, agent_dto.SessionPromptInput{SessionID: s.SessionID})
+	if err != nil || got.System != input.System || got.Name != input.Name || !got.Locked {
+		t.Fatalf("deleting a library prompt changed a session: %+v, %v", got, err)
+	}
+	if err := a.DeleteSystemPrompt(ctx, agent_dto.PromptLibraryInput{Name: "../escape"}); err == nil {
+		t.Fatal("path traversal accepted")
+	}
+	if err := a.DeleteSystemPrompt(ctx, input); err == nil {
+		t.Fatal("deleting a missing prompt should fail")
+	}
+}

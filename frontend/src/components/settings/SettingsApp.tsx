@@ -15,6 +15,7 @@ import { ProviderDetailView } from '@/components/settings/providers/ProviderDeta
 import { ProviderList } from '@/components/settings/providers/ProviderList'
 import { SkillsList } from '@/components/settings/skills/SkillsList'
 import { SkillsDetailPane } from '@/components/settings/skills/SkillsDetailPane'
+import { SystemPromptsSection } from '@/components/settings/prompts/SystemPromptsSection'
 import { useSettingsBootstrap } from '@/hooks/useSettingsBootstrap'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useTranslation } from 'react-i18next'
@@ -134,7 +135,7 @@ export function SettingsApp() {
 
   useEffect(() => {
     const tab = new URLSearchParams(window.location.search).get('tab')
-    if (tab === 'general' || tab === 'providers' || tab === 'plugins' || tab === 'skills' || tab === 'memory' || tab === 'data' || tab === 'about') {
+    if (tab === 'general' || tab === 'providers' || tab === 'prompts' || tab === 'plugins' || tab === 'skills' || tab === 'memory' || tab === 'data' || tab === 'about') {
       setActiveTab(tab)
     }
   }, [setActiveTab])
@@ -185,6 +186,8 @@ export function SettingsApp() {
         />
       </SettingsSectionLayout>
     )
+  } else if (activeTab === 'prompts') {
+    content = <SystemPromptsSection />
   } else if (activeTab === 'plugins') {
     content = <PluginsSettingsSection plugins={plugins} />
   } else if (activeTab === 'skills') {

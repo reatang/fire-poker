@@ -4,6 +4,10 @@ import { SettingsApp } from '@/components/settings/SettingsApp'
 import i18n from '@/i18n'
 import { getSettingsInitialState, useSettingsStore } from '@/store/settingsStore'
 
+vi.mock('@bindings/github.com/reatang/fire-poker/backend/service/agent', () => ({
+  Agent: { ListSystemPrompts: vi.fn().mockResolvedValue({ names: ['Writing assistant'] }) },
+}))
+
 vi.mock('@/hooks/useSettingsBootstrap', () => ({
   useSettingsBootstrap: vi.fn(),
 }))
@@ -58,5 +62,14 @@ describe('SettingsApp', () => {
     expect(
       screen.getByText('An agent client in classic mode')
     ).toBeInTheDocument()
+  })
+
+  it('opens prompt management from its settings URL', async () => {
+    window.history.replaceState({}, '', '/?entry=settings&tab=prompts')
+
+    render(<SettingsApp />)
+
+    expect(screen.getByRole('heading', { name: 'System prompts' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Writing assistant' })).toBeInTheDocument()
   })
 })

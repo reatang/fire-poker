@@ -123,3 +123,15 @@ func (a *Agent) SaveSystemPrompt(ctx context.Context, input agent_dto.PromptLibr
 	}
 	return &agent_dto.PromptOutput{Name: p.Name, System: p.System}, nil
 }
+
+// DeleteSystemPrompt removes a reusable prompt without changing existing sessions.
+func (a *Agent) DeleteSystemPrompt(ctx context.Context, input agent_dto.PromptLibraryInput) error {
+	store, err := promptStore()
+	if err != nil {
+		return ierror.Error(ierror.ErrAgentPromptLibrary, err)
+	}
+	if err := store.Delete(input.Name); err != nil {
+		return agentError(ierror.ErrAgentPromptLibrary, err)
+	}
+	return nil
+}

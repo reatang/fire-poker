@@ -27,6 +27,13 @@ export function DeleteSession(input: agent_dto$0.DeleteSessionInput): $Cancellab
 }
 
 /**
+ * DeleteSystemPrompt removes a reusable prompt without changing existing sessions.
+ */
+export function DeleteSystemPrompt(input: agent_dto$0.PromptLibraryInput): $CancellablePromise<void> {
+    return $Call.ByID(2111293953, input);
+}
+
+/**
  * ForkSession copies the conversation up to a saved message into a new session.
  */
 export function ForkSession(input: agent_dto$0.ForkSessionInput): $CancellablePromise<agent_dto$0.ForkSessionOutput | null> {
