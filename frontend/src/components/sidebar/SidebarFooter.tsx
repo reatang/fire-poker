@@ -119,23 +119,23 @@ export function SidebarFooter() {
             <button
               className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
               onClick={() => {
-                void Window.OpenSettings({tab:"about"})
-                close()
-              }}
-            >
-              <Info size={14} />
-              {t('settings.about')}
-            </button>
-
-            <button
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
-              onClick={() => {
                 void Window.OpenSettings({tab:""})
                 close()
               }}
             >
               <Settings size={14} />
               {t('settings.settings')}
+            </button>
+
+            <button
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-accent text-left"
+              onClick={() => {
+                void Window.OpenSettings({tab:"about"})
+                close()
+              }}
+            >
+              <Info size={14} />
+              {t('settings.about')}
             </button>
           </div>
         </>,

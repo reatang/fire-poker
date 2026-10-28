@@ -33,7 +33,7 @@ describe('session prompt settings', () => {
     expect(screen.queryByRole('button', { name: '恢复默认' })).not.toBeInTheDocument()
     expect(Agent.UpdateSessionPrompt).not.toHaveBeenCalled()
   })
-  it('loads library text into the editor, and applies only after explicit action', async () => {
+  it('loads library text into the editor, and closes after a successful explicit apply', async () => {
     const user = userEvent.setup()
     render(<SystemPromptSettings sessionId={7} />)
     await user.click(screen.getByRole('button', { name: '系统提示词' }))
@@ -43,7 +43,7 @@ describe('session prompt settings', () => {
     expect(Agent.UpdateSessionPrompt).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: '应用到会话' }))
     await waitFor(() => expect(Agent.UpdateSessionPrompt).toHaveBeenCalledWith({ session_id: 7, system: '你是写作教练', name: '写作助手', reset: false }))
-    expect(await screen.findByRole('status')).toHaveTextContent('已应用到当前会话')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
   it('keeps a failed apply visible and displays the failure', async () => {

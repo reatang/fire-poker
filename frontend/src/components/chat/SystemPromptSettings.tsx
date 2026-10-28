@@ -89,6 +89,7 @@ export function SystemPromptSettings({ sessionId, hasMessages = false }: { sessi
     setSystem(result.system); setName(result.name)
     setLocked(result.locked); setCurrentName(promptLabel(t, result))
     setNotice(t(reset ? 'systemPrompt.restored' : 'systemPrompt.applied'))
+    if (!reset) setOpen(false)
   })
 
   return <>
